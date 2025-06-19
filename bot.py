@@ -19,6 +19,7 @@ from telegram.error import *
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
+ Application,
     MessageHandler,
     filters,
     CallbackQueryHandler,
