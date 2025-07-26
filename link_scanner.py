@@ -1,5 +1,7 @@
 import requests
 import json
+import aiohttp
+import asyncio
 
 googleSafeBrowsing = 'AIzaSyA8QPfUZyVkXZW4N6URMCJwx936I0rcs20'
 virusTotal = 'b22b4647dbc721e344e3e4c4e66ba01ec2f8abb08fa608d3eabb9b32bc2d163e'
@@ -17,7 +19,10 @@ async def scan_url_google_safe_browsing(url):
             "clientVersion": "1.5.2"
         },
         "threatInfo": {
-            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION", "THREAT_TYPE_UNSPECIFIED"],
+            "threatTypes": [
+                "MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE",
+                "POTENTIALLY_HARMFUL_APPLICATION", "THREAT_TYPE_UNSPECIFIED"
+            ],
             "platformTypes": ["ANY_PLATFORM"],
             "threatEntryTypes": ["URL"],
             "url": url
@@ -50,7 +55,7 @@ async def scan_url_virustotal(url):
                 if response.status == 200:
                     data = await response.json()
                     analysis_id = data['data']['id']
-                    await asyncio.sleep(10) # Wait for analysis to complete
+                    await asyncio.sleep(10)
                     report_url = f"https://www.virustotal.com/api/v3/analyses/{analysis_id}"
                     async with session.get(report_url, headers=headers) as report_response:
                         if report_response.status == 200:
@@ -105,12 +110,23 @@ async def scan_url_alienvault_otx(url):
         return f"AlienVault OTX: ❌ حدث خطأ: {e}"
 
 async def scan_url_all(url):
-    results = []
-    results.append(await scan_url_google_safe_browsing(url))
-    results.append(await scan_url_virustotal(url))
-    results.append(await scan_url_urlscan(url))
-    results.append(await scan_url_alienvault_otx(url))
-    return "\n".join(results)
+    raw_results = await asyncio.gather(
+        scan_url_google_safe_browsing(url),
+        scan_url_virustotal(url),
+        scan_url_urlscan(url),
+        scan_url_alienvault_otx(url)
+    )
 
+    # تصفية الردود الناجحة فقط (لا تحتوي على كلمة "❌")
+    successful_results = [result for result in raw_results if "❌" not in result]
 
+    if not successful_results:
+        # كل الردود فشلت، لا نعرض شيء للمستخدم
+        return None
+
+    # تنسيق الإخراج بشكل منظم
+    response_message = "📊 نتائج فحص الرابط:\n\n"
+    for res in successful_results:
+        response_message += f"{res}\n\n"
+    return response_message.strip()
 
