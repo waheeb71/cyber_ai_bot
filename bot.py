@@ -64,6 +64,7 @@ except ImportError as e:
 # --- Flask Imports ---
 from flask import Flask
 from flask import request as flask_request # لتجنب التعارض
+from link_scanner import scan_url_all
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -91,6 +92,7 @@ def get_base_keyboard():
     keyboard = [
         [KeyboardButton("🔄 محادثة جديدة")],
         [KeyboardButton("🔍 البحث في الويب")],
+         [KeyboardButton("🔗 فحص الروابط")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -288,7 +290,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
             return
+         if user_message == "🔗 فحص الروابط":
+            await update.message.reply_text("الرجاء إدخال الرابط الذي تريد فحصه:")
+            context.user_data["waiting_for_url_scan"] = True
+            return
 
+        if context.user_data.get("waiting_for_url_scan"):
+            url_to_scan = user_message
+            await update.message.reply_text("جارٍ فحص الرابط... ⏳")
+            scan_results = await scan_url_all(url_to_scan)
+            await update.message.reply_text(f"نتائج الفحص:\n{scan_results}", reply_markup=get_base_keyboard())
+            context.user_data["waiting_for_url_scan"] = False
+            return
         # التحقق إذا كان البوت ينتظر استعلام بحث
         if context.user_data.get('waiting_for_search_query'):
             await search_exa(update, context) # تأكد أن search_exa هي async
@@ -457,14 +470,6 @@ from telegram.error import TelegramError # <<<=== إضافة مهمة
 
 logger = logging.getLogger(__name__) # تأكد من وجود هذا أو أنه مهيأ في الملف الرئيسي
 
-# --- دوال مساعدة (يفترض أنها معرفة في مكان آخر) ---
-# async def force_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool: ...
-# def get_base_keyboard(): ...
-# def format_text(text: str) -> str: ...
-# class Database: ... (أو db instance)
-# GEMINI_API_KEY = "YOUR_API_KEY"
-# BOT_SIGNATURE = "Your Bot Signature"
-# ----------------------------------------------------
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
