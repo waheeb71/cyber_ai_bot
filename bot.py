@@ -290,7 +290,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
             return
-         if user_message == "🔗 فحص الروابط":
+        if user_message == "🔗 فحص الروابط":
             await update.message.reply_text("الرجاء إدخال الرابط الذي تريد فحصه:")
             context.user_data["waiting_for_url_scan"] = True
             return
