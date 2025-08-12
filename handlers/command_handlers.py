@@ -18,7 +18,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database
     if user.username and is_admin(user.username):
         await update.message.reply_text(f"Your numeric ID is: {user_id}")
 
-    is_new_user = str(user_id) not in db.get_all_users()
+   # is_new_user = str(user_id) not in db.get_all_users()
+    is_new_user = str(user_id) not in db.get_all_users_data()
+
     db.add_user(user_id, user.username or "", user.first_name)
 
     if is_new_user and ADMIN_NOTIFICATION_ID:
