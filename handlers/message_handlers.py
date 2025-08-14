@@ -72,7 +72,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db:
             return
 
         db.update_user_activity(user_id, "text")
-
+        
         user_message_payload = {
             "role": "user",
             "parts": [{"text": f"{PROMPT_PREFIX}\n\nUser message: {user_message}"}]
@@ -81,12 +81,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db:
 
         # Retrieve the last 10 messages for the API call
         messages_for_api = db.get_conversation_history(user_id, limit=10)
-
+        validated_messages = []
+        for msg in messages_for_api:
+            if isinstance(msg, dict) and "role" in msg and "parts" in msg:
+                validated_messages.append(msg)
+        validated_messages.append(user_message_payload)        
         payload = {
-            "contents": messages_for_api,
-            "generationConfig": {
-                "temperature": 0.7, "topK": 40, "topP": 0.95, "maxOutputTokens": 1024,
-            }
+    "contents": validated_messages,  # استخدم هنا الرسائل المصفاة
+    "generationConfig": {
+        "temperature": 0.7,
+        "topK": 40,
+        "topP": 0.95,
+        "maxOutputTokens": 1024,
+    }
         }
         headers = {"Content-Type": "application/json"}
 
