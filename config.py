@@ -22,9 +22,9 @@ if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY is not set. AI features will be limited.")
 
 # --- Gemini API Configuration ---
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
-GEMINI_VISION_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
 
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_VISION_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent"
 # --- Firebase Configuration ---
 SERVICE_ACCOUNT_FILE = os.environ.get("SERVICE_ACCOUNT_FILE", "serviceAccountKey.json")
 FIREBASE_DB_URL = os.environ.get("FIREBASE_DB_URL")
