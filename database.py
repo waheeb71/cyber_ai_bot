@@ -297,7 +297,7 @@ class Database:
                   if isinstance(msg, dict) and "role" in msg and "parts" in msg:
                     validated_history.append(msg)
               return validated_history
-            return []
+           return []
         except Exception as e:
             print(f"Error getting conversation history: {e}")
             return []
