@@ -290,11 +290,17 @@ class Database:
             .get()
         )
            if history:
-              return [item for _, item in sorted(history.items())]
-           return []
-         except Exception as e:
-             print(f"Error getting conversation history: {e}")
-             return []
+            # ترتيب حسب المفتاح وضمان تنسيق كل رسالة
+             sorted_history = [item for _, item in sorted(history.items())]
+             validated_history = []
+             for msg in sorted_history:
+                 if isinstance(msg, dict) and "role" in msg and "parts" in msg:
+                    validated_history.append(msg)
+             return validated_history
+            return []
+        except Exception as e:
+            print(f"Error getting conversation history: {e}")
+        return []
 
 
     def add_message_to_history(self, user_id: int, message: Dict[str, Any]):
