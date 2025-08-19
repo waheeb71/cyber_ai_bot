@@ -3,12 +3,14 @@ import json
 import aiohttp
 import asyncio
 
-googleSafeBrowsing = 'AIzaSyA8QPfUZyVkXZW4N6URMCJwx936I0rcs20'
-virusTotal = 'b22b4647dbc721e344e3e4c4e66ba01ec2f8abb08fa608d3eabb9b32bc2d163e'
-urlScan = '01959437-0353-7001-ad40-722bc7dfd395'
-alienVaultOTX = 'ead0b8ef9672a4f6dcdbaf79c6ef2cdc30595ef81a906848875b4388f6c3356e'
-rapidApiKey = "77289a4b46msh5b6bce0543333c4p1a6572jsn4be28ab7f5a1"
-hunterApiKey = "d2149e36df9fce40edc61154e6a6a6e8260ddf97"
+import os
+
+googleSafeBrowsing = os.getenv("GOOGLE_SAFE_BROWSING")
+virusTotal = os.getenv("VIRUSTOTAL_API_KEY")
+urlScan = os.getenv("URLSCAN_API_KEY")
+alienVaultOTX = os.getenv("ALIENVAULT_OTX_KEY")
+rapidApiKey = os.getenv("RAPIDAPI_KEY")
+hunterApiKey = os.getenv("HUNTER_API_KEY")
 
 async def scan_url_google_safe_browsing(url):
     api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={googleSafeBrowsing}"
