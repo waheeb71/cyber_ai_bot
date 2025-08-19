@@ -7,7 +7,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL")
-SERVICE_ACCOUNT_FILE=serviceAccountKey.json
+SERVICE_ACCOUNT_FILE = "serviceAccountKey.json"
+
 
 
 # Admin Notification ID - try to get from env, otherwise use fallback
