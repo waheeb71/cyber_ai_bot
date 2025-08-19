@@ -9,7 +9,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL")
 SERVICE_ACCOUNT_FILE = "serviceAccountKey.json"
 
-
+SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
 
 # Admin Notification ID - try to get from env, otherwise use fallback
 admin_notification_id_env = os.getenv("ADMIN_NOTIFICATION_ID")
