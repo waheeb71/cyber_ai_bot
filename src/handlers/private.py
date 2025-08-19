@@ -23,9 +23,10 @@ subscription_cache: Dict[int, tuple] = {}
 SUBSCRIPTION_CACHE_DURATION = 60  # seconds
 
 def get_base_keyboard():
-    keyboard = [
+   keyboard = [
         [KeyboardButton("🔄 محادثة جديدة")],
         [KeyboardButton("🔍 البحث في الويب")],
+        [KeyboardButton("🔗 فحص الروابط")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -138,6 +139,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             await search_exa(update, context)
             context.user_data['waiting_for_search_query'] = False
             return
+        if user_message == "🔗 فحص الروابط":
+            await update.message.reply_text("الرجاء إدخال الرابط الذي تريد فحصه:")
+            context.user_data["waiting_for_url_scan"] = True
+            return
+
+        if context.user_data.get("waiting_for_url_scan"):
+            url_to_scan = user_message
+            await update.message.reply_text("جارٍ فحص الرابط... ⏳")
+            scan_results = await scan_url_all(url_to_scan)
+            await update.message.reply_text(f"نتائج الفحص:\n{scan_results}", reply_markup=get_base_keyboard())
+            context.user_data["waiting_for_url_scan"] = False
+            return    
 
         db.update_user_activity(user_id, "text")
 
