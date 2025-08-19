@@ -188,25 +188,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
 
                     if response.status == 200:
                         response_data = await response.json()
-                        candidates = response_data.get('candidates')
-                        if candidates and isinstance(candidates, list) and len(candidates) > 0:
-                            content = candidates[0].get('content')
-                            if content and isinstance(content, dict):
-                                parts_list = content.get('parts')
-                                if parts_list and isinstance(parts_list, list) and len(parts_list) > 0:
-                                    ai_response_text = parts_list[0].get('text', 'عذراً، لم أستطع فهم الرسالة.')
-                                else:
-                                    ai_response_text = 'عذراً، تنسيق الرد غير متوقع.'
-                            else:
-                                ai_response_text = 'عذراً، تنسيق الرد غير متوقع.'
-                        else:
-                            ai_response_text = 'عذراً، لم يتم العثور على مرشحين في الرد.'
 
+                        ai_response_text = "عذراً، لم أتمكن من معالجة طلبك."
+                        try:
+                            ai_response_text = response_data['candidates'][0]['content']['parts'][0]['text']
+                        except (KeyError, IndexError, TypeError) as e:
+                            logger.error(f"Error parsing Gemini response: {e}\nResponse: {response_data}")
+
+                        # Format the raw text for displaying in Telegram
                         formatted_ai_response = format_message(ai_response_text)
 
+                        # Store the raw, unformatted text in history for the next API call
                         conversation_history[user_id].append({
-                            "role": "assistant",
-                            "parts": [{"text": formatted_ai_response}]
+                            "role": "model",
+                            "parts": [{"text": ai_response_text}]
                         })
 
                         await update.message.reply_text(
@@ -297,16 +292,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
 
                 if response.status == 200:
                     response_data = await response.json()
-                    candidates = response_data.get('candidates')
-                    ai_response_text = 'عذراً، لم أستطع تحليل الصورة.'
-                    if candidates and isinstance(candidates, list) and len(candidates) > 0:
-                        content = candidates[0].get('content')
-                        if content and isinstance(content, dict):
-                            parts_list = content.get('parts')
-                            if parts_list and isinstance(parts_list, list) and len(parts_list) > 0:
-                                ai_response_text = parts_list[0].get('text', ai_response_text)
 
-                    formatted_response = format_text(ai_response_text)
+                    ai_response_text = "عذراً، لم أتمكن من تحليل الصورة."
+                    try:
+                        ai_response_text = response_data['candidates'][0]['content']['parts'][0]['text']
+                    except (KeyError, IndexError, TypeError) as e:
+                        logger.error(f"Error parsing Vision API response: {e}\nResponse: {response_data}")
+
+                    formatted_response = format_message(ai_response_text)
                     await update.message.reply_text(
                         f"{formatted_response}{BOT_SIGNATURE}",
                         reply_markup=get_base_keyboard(),
