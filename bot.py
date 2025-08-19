@@ -9,6 +9,8 @@ import html
 import datetime
 import re
 import aiohttp 
+import firebase_init  # هذا سيقرأ متغير البيئة ويجهز Firebase
+
 from telegram.error import TelegramError # <<<=== إضافة مهمة: لالتقاط أخطاء تليجرام المحددة
 # --- Configuration Imports ---
 from threading import Thread
