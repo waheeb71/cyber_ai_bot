@@ -6,8 +6,9 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE")
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL")
+SERVICE_ACCOUNT_FILE=serviceAccountKey.json
+
 
 # Admin Notification ID - try to get from env, otherwise use fallback
 admin_notification_id_env = os.getenv("ADMIN_NOTIFICATION_ID")
