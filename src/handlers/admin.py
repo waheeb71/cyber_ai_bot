@@ -717,7 +717,7 @@ async def handle_ban_unban_message(update: Update, context: ContextTypes.DEFAULT
 async def show_statistics(query, db):
     """Show bot statistics."""
     stats = db.get_total_stats()
-    daily_stats = db.get_daily_stats()
+    daily_stats = db.get_daily_activity_stats()
     stats_text = f"""📊 إحصائيات البوت:
 
 👥 عدد المستخدمين: {stats['total_users']}
