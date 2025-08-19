@@ -14,7 +14,7 @@ from telegram.error import TelegramError
 from ..config import GEMINI_API_KEY, GEMINI_API_URL, BOT_SIGNATURE, ADMIN_NOTIFICATION_ID
 from ..utils.formatting import format_message, add_signature
 from ..utils.search import search_exa
-from ..utils.link_scanner import scan_url
+from ..utils.link_scanner import scan_link
 from .admin import is_admin, admin_panel, handle_admin_message
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
         if context.user_data.get("waiting_for_url_scan"):
             url_to_scan = user_message
             await update.message.reply_text("جارٍ فحص الرابط... ⏳")
-            scan_results = await scan_url_all(url_to_scan)
+            scan_results = await scan_link(url_to_scan)
             await update.message.reply_text(f"نتائج الفحص:\n{scan_results}", reply_markup=get_base_keyboard())
             context.user_data["waiting_for_url_scan"] = False
             return    
