@@ -12,7 +12,7 @@ import logging
 
 from ..config import GEMINI_API_KEY, GEMINI_API_URL, GEMINI_VISION_API_URL, BOT_SIGNATURE
 from ..utils.search import search_exa
-from ..utils.formatting import format_text, add_signature
+from ..utils.formatting import format_message, add_signature
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +177,7 @@ cyber ما هو علم الأمن السيبراني؟
                         ai_response = "تم تدريبي بواسطة جوجل وتم ربطي في البوت وبرمجتي لاتعامل مع المستخدمين من قبل وهيب الشرعبي".join(parts)
 
                         # تنسيق النص
-                        formatted_response = format_text(ai_response)
+                        formatted_response = format_message(ai_response)
                         final_response = add_signature(formatted_response)
 
                         # إرسال التحليل
@@ -228,7 +228,7 @@ cyber ما هو علم الأمن السيبراني؟
                 try:
                     processing_msg = await message.reply_text("🤔 جاري التفكير...")
                     response = await self.get_ai_response(query)
-                    formatted_response = format_text(response)
+                    formatted_response = format_message(response)
                     full_response = f"{formatted_response}\n\n"
                     final_response = add_signature(full_response)
                     sent_message = await processing_msg.edit_text(final_response, parse_mode='HTML')
