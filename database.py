@@ -279,53 +279,6 @@ class Database:
     def get_all_user_ids_for_broadcast(self) -> List[str]: # تغيير الاسم ليكون أوضح
         return list(self.data.get("users", {}).keys())
 
-    # --- Conversation History Methods ---
-    def get_conversation_history(self, user_id, limit=10):
-        try:
-           history_ref = self.ref.child("users").child(str(user_id)).child("history")
-           history = (
-            history_ref
-            .order_by_key()
-            .limit_to_last(limit)
-            .get()
-        )
-           if history:
-            # ترتيب حسب المفتاح وضمان تنسيق كل رسالة
-              sorted_history = [item for _, item in sorted(history.items())]
-              validated_history = []
-              for msg in sorted_history:
-                  if isinstance(msg, dict) and "role" in msg and "parts" in msg:
-                    validated_history.append(msg)
-              return validated_history
-           return []
-        except Exception as e:
-            print(f"Error getting conversation history: {e}")
-            return []
-
-
-    def add_message_to_history(self, user_id: int, message: Dict[str, Any]):
-        """Adds a message to the user's conversation history."""
-        if not self.ref:
-            return
-        user_id_str = str(user_id)
-        try:
-            history_ref = self.ref.child(f"conversation_history/{user_id_str}")
-            history_ref.push(message)
-        except Exception as e:
-            logger.error(f"Failed to add message to history for user {user_id_str}: {e}", exc_info=True)
-
-    def clear_conversation_history(self, user_id: int):
-        """Clears the conversation history for a specific user."""
-        if not self.ref:
-            return
-        user_id_str = str(user_id)
-        try:
-            history_ref = self.ref.child(f"conversation_history/{user_id_str}")
-            history_ref.delete()
-            logger.info(f"Cleared conversation history for user: {user_id_str}")
-        except Exception as e:
-            logger.error(f"Failed to clear conversation history for user {user_id_str}: {e}", exc_info=True)
-
     # --- Group Methods ---
     def add_group(self, chat_id: int, title: str, members_count: Optional[int] = None):
         if not self.ref: return
