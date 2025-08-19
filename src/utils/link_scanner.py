@@ -119,14 +119,14 @@ async def scan_link(url):
         scan_url_alienvault_otx(url)
     )
 
-    # تصفية الردود الناجحة فقط (لا تحتوي على كلمة "❌")
+  
     successful_results = [result for result in raw_results if "❌" not in result]
 
     if not successful_results:
-        # كل الردود فشلت، لا نعرض شيء للمستخدم
+       
         return None
 
-    # تنسيق الإخراج بشكل منظم
+  
     response_message = "📊 نتائج فحص الرابط:\n\n"
     for res in successful_results:
         response_message += f"{res}\n\n"
