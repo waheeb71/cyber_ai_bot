@@ -191,14 +191,14 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             fail_count = 0
 
             # Get all users from database
-            all_users = db.data["users"].keys()
+            all_users = db.get_all_user_ids_for_broadcast()
             total_users = len(all_users)
 
             # Send to each user
             for user_id in all_users:
                 try:
                     # Skip banned users
-                    if user_id in db.data["banned_users"]:
+                    if db.is_user_banned(int(user_id)):
                         continue
 
                     if broadcast_msg.photo:
@@ -266,7 +266,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             fail_count = 0
 
             # Get all users from database
-            all_users = db.data["users"].keys()
+            all_users = db.get_all_user_ids_for_broadcast()
             total_users = len(all_users)
 
             # Handle forwarded advertisement
@@ -304,7 +304,7 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             for user_id in all_users:
                 try:
                     # Skip banned users
-                    if user_id in db.data["banned_users"]:
+                    if db.is_user_banned(int(user_id)):
                         continue
 
                     if forward_msg.photo:
@@ -370,8 +370,9 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             try:
                 # تنفيذ الحظر
                 db.ban_user(user_id)
-                username = db.data["users"][str(user_id)].get("username", "")
-                first_name = db.data["users"][str(user_id)].get("first_name", "")
+                user_info = db.get_user_info(user_id) or {}
+                username = user_info.get("username", "")
+                first_name = user_info.get("first_name", "")
 
                 # محاولة إرسال إشعار للمستخدم
                 try:
@@ -407,8 +408,9 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             try:
                 # تنفيذ إلغاء الحظر
                 db.unban_user(user_id)
-                username = db.data["users"][str(user_id)].get("username", "")
-                first_name = db.data["users"][str(user_id)].get("first_name", "")
+                user_info = db.get_user_info(user_id) or {}
+                username = user_info.get("username", "")
+                first_name = user_info.get("first_name", "")
 
                 # محاولة إرسال إشعار للمستخدم
                 try:
@@ -476,14 +478,15 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 return
 
             # التحقق مما إذا كان المستخدم محظوراً بالفعل
-            if str(user_id) in db.data["banned_users"]:
+            if db.is_user_banned(user_id):
                 await update.message.reply_text("❌ هذا المستخدم محظور بالفعل!")
                 return
 
             # حفظ معرف المستخدم وإرسال رسالة التأكيد
             context.user_data['ban_user_id'] = user_id
-            username = db.data["users"][str(user_id)].get("username", "")
-            first_name = db.data["users"][str(user_id)].get("first_name", "")
+            user_info = db.get_user_info(user_id) or {}
+            username = user_info.get("username", "")
+            first_name = user_info.get("first_name", "")
 
             await update.message.reply_text(
                 f"⚠️ تأكيد حظر المستخدم\n\n"
@@ -508,14 +511,15 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
         try:
             user_id = int(message_text)
             # التحقق من أن المستخدم محظور
-            if str(user_id) not in db.data["banned_users"]:
+            if not db.is_user_banned(user_id):
                 await update.message.reply_text("❌ هذا المستخدم غير محظور!")
                 return
 
             # حفظ معرف المستخدم وإرسال رسالة التأكيد
             context.user_data['unban_user_id'] = user_id
-            username = db.data["users"][str(user_id)].get("username", "")
-            first_name = db.data["users"][str(user_id)].get("first_name", "")
+            user_info = db.get_user_info(user_id) or {}
+            username = user_info.get("username", "")
+            first_name = user_info.get("first_name", "")
 
             await update.message.reply_text(
                 f"⚠️ تأكيد إلغاء حظر المستخدم\n\n"
@@ -732,7 +736,7 @@ async def show_statistics(query, db):
 
 async def show_users(query, db):
     """Show users information."""
-    users = db.get_all_users()
+    users = list(db.get_all_users_data().values())
     active_users = [u for u in users if datetime.fromisoformat(u['last_active']).date() == datetime.now().date()]
     users_text = f"""👥 معلومات المستخدمين:
 
@@ -801,7 +805,7 @@ async def start_unban(query: Update.callback_query, context: ContextTypes.DEFAUL
 
 async def show_premium_users(query, db):
     """Show list of premium users."""
-    premium_users = db.get_premium_users()
+    premium_users = db.get_premium_users_ids()
 
     if not premium_users:
         await query.message.edit_text(
@@ -835,7 +839,7 @@ async def show_premium_users(query, db):
 
 async def show_banned_users(query, db):
     """Show list of banned users."""
-    banned_users = db.data["banned_users"]
+    banned_users = db.get_banned_users_ids()
     if not banned_users:
         await query.message.edit_text(
             "لا يوجد مستخدمين محظورين حالياً. ✅",
@@ -845,7 +849,7 @@ async def show_banned_users(query, db):
 
     banned_users_text = "📋 قائمة المستخدمين المحظورين:\n\n"
     for user_id in banned_users:
-        user_data = db.data["users"].get(str(user_id), {})
+        user_data = db.get_user_info(int(user_id)) or {}
         username = user_data.get("username", "")
         first_name = user_data.get("first_name", "")
         banned_users_text += f"- الاسم: {first_name}\n  المعرف: @{username}\n  رقم المعرف: {user_id}\n\n"
