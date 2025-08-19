@@ -23,14 +23,14 @@ conversation_history: Dict[int, List[Dict]] = {}
 subscription_cache: Dict[int, tuple] = {}
 SUBSCRIPTION_CACHE_DURATION = 60  # seconds
 
+
 def get_base_keyboard():
-   keyboard = [
+    keyboard = [
         [KeyboardButton("🔄 محادثة جديدة")],
         [KeyboardButton("🔍 البحث في الويب")],
         [KeyboardButton("🔗 فحص الروابط")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Check if user is subscribed to the channel."""
     try:
