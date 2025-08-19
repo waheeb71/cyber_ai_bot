@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
 from ..config import GEMINI_API_KEY, GEMINI_API_URL, BOT_SIGNATURE, ADMIN_NOTIFICATION_ID
-from ..utils.formatting import format_text, add_signature
+from ..utils.formatting import format_message, add_signature
 from ..utils.search import search_exa
 from ..utils.link_scanner import scan_url
 from .admin import is_admin, admin_panel, handle_admin_message
@@ -202,7 +202,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                         else:
                             ai_response_text = 'عذراً، لم يتم العثور على مرشحين في الرد.'
 
-                        formatted_ai_response = format_text(ai_response_text)
+                        formatted_ai_response = format_message(ai_response_text)
 
                         conversation_history[user_id].append({
                             "role": "assistant",
