@@ -111,7 +111,7 @@ async def scan_url_alienvault_otx(url):
     except Exception as e:
         return f"AlienVault OTX: ❌ حدث خطأ: {e}"
 
-async def scan_url_all(url):
+async def scan_link(url):
     raw_results = await asyncio.gather(
         scan_url_google_safe_browsing(url),
         scan_url_virustotal(url),
