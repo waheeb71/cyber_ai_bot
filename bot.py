@@ -9,14 +9,13 @@ import html
 import datetime
 import re
 import aiohttp 
-import firebase_init  # هذا سيقرأ متغير البيئة ويجهز Firebase
-
-from telegram.error import TelegramError # <<<=== إضافة مهمة: لالتقاط أخطاء تليجرام المحددة
+import firebase_init  #
+from telegram.error import TelegramError 
 # --- Configuration Imports ---
 from threading import Thread
 from typing import Dict, List
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.constants import ChatMemberStatus # لاستخدامها في clear_messages
+from telegram.constants import ChatMemberStatus 
 from telegram.error import *
 from telegram.ext import (
     ApplicationBuilder,
@@ -34,7 +33,7 @@ from telegram.ext import (
 try:
     from config import TELEGRAM_TOKEN, GEMINI_API_KEY, GEMINI_API_URL, BOT_SIGNATURE, ADMIN_NOTIFICATION_ID
     from database import Database
-    # تأكد من أن search_exa معرفة كـ async إذا كنت تستخدمها مع await
+    
     from search import search_exa
     from admin_panel import (
     admin_panel,
@@ -59,7 +58,7 @@ try:
 )
     from group_handler import GroupHandler
 except ImportError as e:
-    # استخدام logger هنا قد لا يكون متاحًا بعد، لذا نستخدم print
+   
     print(f"Critical Import Error: {e}. Please ensure all required local files (config.py, database.py, etc.) are present.")
     exit(1)
 
