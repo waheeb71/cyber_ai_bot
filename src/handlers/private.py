@@ -14,6 +14,7 @@ from telegram.error import TelegramError
 from ..config import GEMINI_API_KEY, GEMINI_API_URL, BOT_SIGNATURE, ADMIN_NOTIFICATION_ID
 from ..utils.formatting import format_text, add_signature
 from ..utils.search import search_exa
+from ..utils.link_scanner import scan_url
 from .admin import is_admin, admin_panel, handle_admin_message
 
 logger = logging.getLogger(__name__)
