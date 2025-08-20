@@ -11,7 +11,7 @@ try:
     from config import SERVICE_ACCOUNT_FILE, FIREBASE_DB_URL
 except ImportError:
     logger.critical("config.py not found or SERVICE_ACCOUNT_FILE/FIREBASE_DB_URL missing.")
-    # يمكنك اختيار الخروج أو ترك التطبيق يفشل لاحقًا إذا لم يتمكن من التهيئة
+ 
     SERVICE_ACCOUNT_FILE = None 
     FIREBASE_DB_URL = None
 
