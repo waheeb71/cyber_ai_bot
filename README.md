@@ -5,6 +5,14 @@ Welcome to the **Smart Student Assistant Bot** project! This bot is designed to 
 
 ---
 
+## Bot Screenshots
+![Start Screen](images/screenshot4.png)
+
+---
+Check out my Telegram bot: [Abu Ras Bot](https://t.me/byber2bot)
+
+[![Chat with me on Telegram](https://img.shields.io/badge/Telegram-Bot-blue?logo=telegram)](https://t.me/byber2bot)
+
 ## ✨ Key Features
 
 -  **Intelligent Conversations**: Interact with the latest AI models from Gemini to get answers to your questions, explanations for complex concepts, and help with your assignments.  
