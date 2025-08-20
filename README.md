@@ -6,7 +6,7 @@ Welcome to the **Smart Student Assistant Bot** project! This bot is designed to 
 ---
 
 ## Bot Screenshots
-![Start Screen](images/screenshot4.png)
+![Start Screen](Screenshot5.png)
 
 ---
 Check out my Telegram bot: [Abu Ras Bot](https://t.me/byber2bot)
@@ -90,3 +90,11 @@ For questions or support, contact me via:
 
 **English:** Waheeb Mahyoob Al-Sharabi (Waheeb Al-Sharabi)  
 **العربية:** هيب مهيوب الشرعبي (هيب الشرعبي)
+
+---
+
+## Acknowledgements
+
+This project is based on [cyber_ai_bot](https://github.com/waheeb71/cyber_ai_bot) by Waheeb Al-Sharabi.  
+We modified and extended the original project while giving full credit to the original author.
+
