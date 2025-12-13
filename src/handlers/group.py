@@ -109,8 +109,7 @@ class GroupHandler:
 • /resetprompt - لإعادة تعيين البرومبت للفاصل
 • /getprompt - لعرض البرومبت الحالي
 
-مثال:
-cyber ما هو علم الأمن السيبراني؟
+
 """
         await update.message.reply_text(help_text)
 
