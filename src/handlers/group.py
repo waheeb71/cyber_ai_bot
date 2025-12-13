@@ -76,12 +76,28 @@ class GroupHandler:
 • اكتب 'cyber' متبوعاً برسالتك للتحدث مع الذكاء الاصطناعي
 • /cyber - للتعرف على البوت
 • /help - لعرض هذه التعليمات
-• م' او 'الاوامر' - لعرض قائمة الأوامر المتاحة'
+• /setprompt - لتعيين برومبت مخصص للمجموعة
+• /resetprompt - لإعادة تعيين البرومبت للفاصل
+• /getprompt - لعرض البرومبت الحالي
 
 مثال:
 cyber ما هو علم الأمن السيبراني؟
 """
         await update.message.reply_text(help_text)
+
+    async def cyber_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """التعريف بالبوت"""
+        about_text = """
+ مرحباً! أنا بوت Cyber المتخصص في الذكاء الاصطناعي.
+
+يمكنني:
+• الإجابة على أسئلتك المتعلقة بالأمن السيبراني
+• مساعدتك في فهم المفاهيم التقنية
+• التفاعل مع ردودك ومناقشاتك
+
+للبدء، فقط اكتب 'cyber' متبوعاً بسؤالك! 
+"""
+        await update.message.reply_text(about_text)
 
     async def set_prompt_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """تعيين برومبت مخصص للمجموعة"""
