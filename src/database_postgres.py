@@ -92,8 +92,19 @@ class Database:
                     join_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                     message_count INTEGER DEFAULT 0,
                     members_count INTEGER,
-                    last_active TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    last_active TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    custom_prompt TEXT
                 )
+            """)
+
+            # Ensure custom_prompt column exists (for existing tables)
+            cursor.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='groups' AND column_name='custom_prompt') THEN
+                        ALTER TABLE groups ADD COLUMN custom_prompt TEXT;
+                    END IF;
+                END $$;
             """)
             
             # Daily image counts table
@@ -635,13 +646,99 @@ class Database:
             
         except Exception as e:
             if conn:
+                self._return_connection(conn)
+
+    def set_group_prompt(self, chat_id: int, prompt: str):
+        """Set a custom prompt for a group."""
+        if not self.pool:
+            return
+        
+        conn = None
+        cursor = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE groups SET custom_prompt = %s WHERE chat_id = %s
+            """, (prompt, chat_id))
+            conn.commit()
+            logger.info(f"Set custom prompt for group {chat_id}")
+        except Exception as e:
+            if conn:
                 conn.rollback()
-            logger.error(f"Failed to add group {chat_id}: {e}", exc_info=True)
+            logger.error(f"Failed to set group prompt: {e}", exc_info=True)
         finally:
             if cursor:
                 cursor.close()
             if conn:
                 self._return_connection(conn)
+
+    def reset_group_prompt(self, chat_id: int):
+        """Reset group prompt to default."""
+        if not self.pool:
+            return
+        
+        conn = None
+        cursor = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE groups SET custom_prompt = NULL WHERE chat_id = %s
+            """, (chat_id,))
+            conn.commit()
+            logger.info(f"Reset prompt for group {chat_id}")
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"Failed to reset group prompt: {e}", exc_info=True)
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self._return_connection(conn)
+
+    def get_group_prompt(self, chat_id: int) -> Optional[str]:
+        """Get custom prompt for a group."""
+        if not self.pool:
+            return None
+        
+        conn = None
+        cursor = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT custom_prompt FROM groups WHERE chat_id = %s", (chat_id,))
+            result = cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            logger.error(f"Error getting group prompt: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self._return_connection(conn)
+
+    def get_prompt_content(self, prompt_name: str = 'default') -> str:
+        """Get content of a system prompt by name."""
+        conn = None
+        cursor = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT content FROM prompts WHERE name = %s", (prompt_name,))
+            result = cursor.fetchone()
+            return result[0] if result else ""
+        except Exception as e:
+            logger.error(f"Error getting prompt content: {e}")
+            return ""
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self._return_connection(conn)
+
 
     def get_all_groups(self) -> List[Dict[str, Any]]:
         """Get all groups."""

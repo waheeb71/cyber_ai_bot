@@ -83,24 +83,57 @@ cyber ما هو علم الأمن السيبراني؟
 """
         await update.message.reply_text(help_text)
 
-    async def cyber_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """التعريف بالبوت"""
-        about_text = """
- مرحباً! أنا بوت Cyber المتخصص في الذكاء الاصطناعي.
+    async def set_prompt_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """تعيين برومبت مخصص للمجموعة"""
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        
+        # Check if user is admin
+        member = await context.bot.get_chat_member(chat_id, user.id)
+        if member.status not in ['administrator', 'creator']:
+             await update.message.reply_text("⛔ عذراً، هذا الأمر مخصص للمشرفين فقط.")
+             return
 
-يمكنني:
-• الإجابة على أسئلتك المتعلقة بالأمن السيبراني
-• مساعدتك في فهم المفاهيم التقنية
-• التفاعل مع ردودك ومناقشاتك
+        if not context.args:
+            await update.message.reply_text("الرجاء كتابة البرومبت الجديد بعد الأمر.\nمثال: /setprompt أنت مساعد متخصص في البرمجة")
+            return
 
-للبدء، فقط اكتب 'cyber' متبوعاً بسؤالك! 
-"""
-        await update.message.reply_text(about_text)
+        new_prompt = ' '.join(context.args)
+        self.db.set_group_prompt(chat_id, new_prompt)
+        await update.message.reply_text("✅ تم تعيين البرومبت الجديد للمجموعة بنجاح!")
+
+    async def reset_prompt_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """إعادة تعيين البرومبت للافتراضي"""
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        
+        # Check if user is admin
+        member = await context.bot.get_chat_member(chat_id, user.id)
+        if member.status not in ['administrator', 'creator']:
+             await update.message.reply_text("⛔ عذراً، هذا الأمر مخصص للمشرفين فقط.")
+             return
+
+        self.db.reset_group_prompt(chat_id)
+        await update.message.reply_text("🔄 تم إعادة تعيين البرومبت إلى الوضع الافتراضي.")
+
+    async def get_prompt_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """عرض البرومبت الحالي"""
+        chat_id = update.effective_chat.id
+        custom_prompt = self.db.get_group_prompt(chat_id)
+        
+        if custom_prompt:
+            await update.message.reply_text(f"📝 البرومبت الحالي للمجموعة:\n\n{custom_prompt}")
+        else:
+            default_prompt = self.db.get_prompt_content('default')
+            await update.message.reply_text(f"ℹ️ تستخدم المجموعة البرومبت الافتراضي:\n\n{default_prompt}")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """التعامل مع الرسائل في المجموعات"""
         message = update.message
         chat_id = update.effective_chat.id
+        
+        if not message:
+             return
 
         # التأكد من تشغيل مهمة التنظيف
         await self.start_cleanup_task()
@@ -108,6 +141,11 @@ cyber ما هو علم الأمن السيبراني؟
         # التحقق من أن الرسالة في مجموعة
         if update.effective_chat.type not in ['group', 'supergroup']:
             return
+
+        # Context Info
+        group_title = update.effective_chat.title
+        user_first_name = message.from_user.first_name if message.from_user else "Unknown"
+        user_username = message.from_user.username if message.from_user else "Unknown"
 
         # معالجة الصور (مع أو بدون نص)
         if message.photo:
@@ -129,14 +167,27 @@ cyber ما هو علم الأمن السيبراني؟
                     caption = message.caption.lower().replace('cyber', '', 1).strip()
 
                 if caption is not None:
-                    caption = f"{caption}  )"
+                    # Get prompt
+                    custom_prompt = self.db.get_group_prompt(chat_id)
+                    system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
 
+                    full_prompt = f"""
+[System Context]
+User: {user_first_name} (@{user_username})
+Group: {group_title}
+
+[System Prompt]
+{system_prompt}
+
+[User Request]
+{caption} (Use emoji appropriately)
+"""
                     # تحضير الطلب
                     payload = {
                         "contents": [{
                             "role": "user",
                             "parts": [
-                                {"text": caption},
+                                {"text": full_prompt},
                                 {
                                     "inline_data": {
                                         "mime_type": "image/jpeg",
@@ -161,10 +212,8 @@ cyber ما هو علم الأمن السيبراني؟
                         "Content-Type": "application/json"
                     }
 
-                    vision_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent"
-
                     response = requests.post(
-                        f"{vision_url}?key={GEMINI_API_KEY}",
+                        f"{GEMINI_VISION_API_URL}?key={GEMINI_API_KEY}",
                         headers=headers,
                         json=payload
                     )
@@ -193,18 +242,18 @@ cyber ما هو علم الأمن السيبراني؟
                             'timestamp': time.time()
                         }
                     else:
-                        await processing_msg.edit_text("⚠️ عذراً، حدث خطأ في معالجة الصورة. الرجاء المحاولة مرة أخرى.")
+                        await processing_msg.edit_text(" عذراً، حدث خطأ في معالجة الصورة. الرجاء المحاولة مرة أخرى.")
                         logger.error(f"API Error: {response.status_code}\n{response.text}")
 
             except Exception as e:
-                await message.reply_text("⚠️ عذراً، حدث خطأ أثناء تحليل الصورة. الرجاء المحاولة مرة أخرى.")
+                await message.reply_text(" عذراً، حدث خطأ أثناء تحليل الصورة. الرجاء المحاولة مرة أخرى.")
                 logger.error(f"Error processing image: {str(e)}")
             return
 
         # التحقق من نوع الرسالة
         if not message.text:
             return
-        if message.text == "🔄 محادثة جديدة":
+        if message.text == " محادثة جديدة":
 
          self.message_history[chat_id] = {}  # Clear message history
 
@@ -214,7 +263,7 @@ cyber ما هو علم الأمن السيبراني؟
          )
          return
 
-        if message.text == "🔍 البحث في الويب":
+        if message.text == " البحث في الويب":
             await update.message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
             return
@@ -228,7 +277,25 @@ cyber ما هو علم الأمن السيبراني؟
             if query:
                 try:
                     processing_msg = await message.reply_text("🤔 جاري التفكير...")
-                    response = await self.get_ai_response(query)
+                    
+                    # Get prompt
+                    custom_prompt = self.db.get_group_prompt(chat_id)
+                    system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
+
+                    # Construct context-aware prompt
+                    full_prompt = f"""
+[System Context]
+User: {user_first_name} (@{user_username})
+Group: {group_title}
+
+[System Prompt]
+{system_prompt}
+
+[User Request]
+{query}
+"""
+
+                    response = await self.get_ai_response(full_prompt)
                     formatted_response = format_message(response)
                     full_response = f"{formatted_response}\n\n"
                     final_response = add_signature(full_response)
@@ -243,7 +310,8 @@ cyber ما هو علم الأمن السيبراني؟
                         'timestamp': time.time()
                     }
                 except Exception as e:
-                    await message.reply_text("⚠️ عذراً، حدث خطأ أثناء معالجة طلبك. الرجاء المحاولة مرة أخرى.")
+                    await message.reply_text(" عذراً، حدث خطأ أثناء معالجة طلبك. الرجاء المحاولة مرة أخرى.")
+                    logger.error(f"Error handling group message: {e}", exc_info=True)
             else:
                 await message.reply_text("👋 مرحباً! يرجى كتابة سؤالك بعد كلمة cyber")
             return
@@ -260,8 +328,25 @@ cyber ما هو علم الأمن السيبراني؟
                     previous_context = message.text
 
                 processing_msg = await message.reply_text("🤔 جاري التفكير...")
-                response = await self.get_ai_response(previous_context)
-                formatted_response = format_text(response)
+                
+                # Get prompt
+                custom_prompt = self.db.get_group_prompt(chat_id)
+                system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
+                
+                full_prompt = f"""
+[System Context]
+User: {user_first_name} (@{user_username})
+Group: {group_title}
+
+[System Prompt]
+{system_prompt}
+
+[Conversation Context]
+{previous_context}
+"""
+
+                response = await self.get_ai_response(full_prompt)
+                formatted_response = format_message(response)
                 full_response = f"{formatted_response}\n\n"
                 final_response = add_signature(full_response)
                 sent_message = await processing_msg.edit_text(final_response, parse_mode='HTML')
@@ -303,24 +388,7 @@ cyber ما هو علم الأمن السيبراني؟
             data = {
                 "contents": [{
                     "parts": [{
-                       "text": f"""
-✨ مرحبًا بك! ✨  
-
-ملاحظة مرفقة مع الرسالة:  
-تواصل مع المستخدمين وكأنك صديق مقرب، بطريقة دافئة ومرحة تجعلهم يشعرون بالراحة والود.  
-استخدم أسلوبًا طبيعيًا ولطيفًا، وأضف لمسات مميزة تُظهر شخصيتك اليمنية الفريدة.  
-كن واقعيًا وعاقلًا عند تقديم المعلومات، وامزج بين الجدية والمرح حسب الموقف.  
-لا تذكر اسمي إلا إذا طُلب منك ذلك.  
-اسمك على تليجرام هو أبو راس، وقد تم ربطك عبر بوت تليجرام من قِبل وهيب الشرعبي من اليمن.  
-استخدم الإيموجيات التفاعلية والرموز التعبيرية لجعل محادثتك أكثر حيوية وجاذبية 😊✨.
-
-━━━━━━━━━━━━━━
-رسالة المستخدم:
-{user_message}
-
-💬 أجب بأسلوب ودود، مرح، وواقعي. أضف لمسة شخصية تجعل المستخدم يريد التفاعل معك دائمًا!
-"""
-
+                       "text": text
                     }]
                 }]
             }
@@ -347,6 +415,9 @@ cyber ما هو علم الأمن السيبراني؟
 
     async def get_image_analysis(self, image_data: bytes, text: str) -> str:
         """تحليل الصورة باستخدام Gemini Vision API"""
+        # ... (Existing logic, but we might want to update prompt logic here too if needed, but the main handle_message covers the primary image flow)
+        # Note: The main logic for group images seems to be inside handle_message, so this method might be unused or secondary.
+        # I will keep it as is for now to avoid breaking other flows, but handle_message handles the group image flow directly.
         try:
             # تحويل الصورة إلى Base64
             image_base64 = base64.b64encode(image_data).decode('utf-8')

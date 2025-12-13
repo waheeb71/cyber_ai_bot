@@ -72,6 +72,9 @@ def setup_handlers(app: Application):
     # --- Group Handlers ---
     app.add_handler(CommandHandler('cyber', group_handler_instance.cyber_command))
     app.add_handler(CommandHandler('help', group_handler_instance.help_command))
+    app.add_handler(CommandHandler('setprompt', group_handler_instance.set_prompt_command))
+    app.add_handler(CommandHandler('resetprompt', group_handler_instance.reset_prompt_command))
+    app.add_handler(CommandHandler('getprompt', group_handler_instance.get_prompt_command))
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, group_handler_instance.handle_message))
 
     # --- Error Handler ---
