@@ -199,15 +199,6 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await show_premium_users(query, db)
     elif query.data == "forward_ad":
         await start_broadcast(update, context)
-    elif query.data == "admin_broadcast":
-        # New broadcast system
-        from .broadcast import start_broadcast
-        await start_broadcast(query, context)
-
-    elif query.data == "forward_ad":
-         # Use same broadcast system for forwarding
-        from .broadcast import start_broadcast
-        await start_broadcast(query, context)
 
     elif query.data == "confirm_ban":
         user_id = context.user_data.get('ban_user_id')
