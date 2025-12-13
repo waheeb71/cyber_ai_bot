@@ -5,6 +5,12 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Load multiple keys from a comma-separated string or list
+_keys_str = os.getenv("GEMINI_API_KEYS", "")
+GEMINI_API_KEYS = [k.strip() for k in _keys_str.split(",") if k.strip()]
+if not GEMINI_API_KEYS and GEMINI_API_KEY:
+    GEMINI_API_KEYS = [GEMINI_API_KEY]
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # PostgreSQL Database URL

@@ -12,8 +12,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
-from ..config import GEMINI_API_KEY, GEMINI_API_URL, BOT_SIGNATURE, ADMIN_NOTIFICATION_ID
+from ..config import GEMINI_API_KEYS, GEMINI_API_URL, BOT_SIGNATURE, ADMIN_NOTIFICATION_ID
 from ..utils.formatting import format_message, add_signature
+from ..utils.key_manager import KeyManager
 from ..utils.search import search_exa
 from ..utils.link_scanner import scan_link
 from .admin import is_admin, admin_panel, handle_admin_message
@@ -62,6 +63,7 @@ class ConversationManager:
         self.histories[user_id] = []
 
 conversation_manager = ConversationManager()
+key_manager = KeyManager(GEMINI_API_KEYS)
 subscription_cache: Dict[int, tuple] = {}
 SUBSCRIPTION_CACHE_DURATION = 60  # seconds
 
@@ -166,7 +168,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                 await handle_admin_message(update, context, db)
                 return
 
-        if user_message == "🔄 محادثة جديدة":
+        if user_message == " محادثة جديدة":
             conversation_manager.clear_history(user_id)
             await update.message.reply_text(
                 f"تم مسح الذاكرة وبدء محادثة جديدة! كيف يمكنني مساعدتك؟{BOT_SIGNATURE}",
@@ -175,7 +177,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             return
 
         # ... (Search and Link Scan checks remain same) ...
-        if user_message == "🔍 البحث في الويب":
+        if user_message == " البحث في الويب":
             await update.message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
             return
@@ -184,14 +186,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             await search_exa(update, context)
             context.user_data['waiting_for_search_query'] = False
             return
-        if user_message == "🔗 فحص الروابط":
+        if user_message == " فحص الروابط":
             await update.message.reply_text("الرجاء إدخال الرابط الذي تريد فحصه:")
             context.user_data["waiting_for_url_scan"] = True
             return
 
         if context.user_data.get("waiting_for_url_scan"):
             url_to_scan = user_message
-            await update.message.reply_text("جارٍ فحص الرابط... ⏳")
+            await update.message.reply_text("جارٍ فحص الرابط... ")
             scan_results = await scan_link(url_to_scan)
             await update.message.reply_text(f"نتائج الفحص:\n{scan_results}", reply_markup=get_base_keyboard())
             context.user_data["waiting_for_url_scan"] = False
@@ -221,54 +223,71 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
 
         thinking_message = await update.message.reply_text("جار التفكير... ⏳")
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-                    headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=50)
-                ) as response:
-                    if thinking_message:
-                        try:
-                            await thinking_message.delete()
-                        except (TelegramError, Exception) as e:
-                            logger.warning(f"Failed to delete thinking_message: {e}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            current_key = key_manager.get_current_key()
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{GEMINI_API_URL}?key={current_key}",
+                        headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=50)
+                    ) as response:
+                        if response.status == 200:
+                            # Success! cleanup thinking message if exists (only once)
+                            if thinking_message:
+                                try:
+                                    await thinking_message.delete()
+                                    thinking_message = None # Prevent multi-delete attempts
+                                except (TelegramError, Exception) as e:
+                                    logger.warning(f"Failed to delete thinking_message: {e}")
 
-                    if response.status == 200:
-                        response_data = await response.json()
+                            response_data = await response.json()
 
-                        ai_response_text = "عذراً، لم أتمكن من معالجة طلبك."
-                        try:
-                            ai_response_text = response_data['candidates'][0]['content']['parts'][0]['text']
-                        except (KeyError, IndexError, TypeError) as e:
-                            logger.error(f"Error parsing Gemini response: {e}\nResponse: {response_data}")
+                            ai_response_text = "عذراً، لم أتمكن من معالجة طلبك."
+                            try:
+                                ai_response_text = response_data['candidates'][0]['content']['parts'][0]['text']
+                            except (KeyError, IndexError, TypeError) as e:
+                                logger.error(f"Error parsing Gemini response: {e}\nResponse: {response_data}")
 
-                        # Format the raw text for displaying in Telegram
-                        formatted_ai_response = format_message(ai_response_text)
+                            # Format the raw text for displaying in Telegram
+                            formatted_ai_response = format_message(ai_response_text)
 
-                        # Add model response to history
-                        conversation_manager.add_message(user_id, "model", ai_response_text)
+                            # Add model response to history
+                            conversation_manager.add_message(user_id, "model", ai_response_text)
 
-                        await update.message.reply_text(
-                            f"{formatted_ai_response}{BOT_SIGNATURE}",
-                            reply_markup=get_base_keyboard(),
-                            parse_mode='HTML'
-                        )
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"API Error for user {user_id}: {response.status}\n{error_text}")
-                        # Fallback: maybe context is corrupted or model overloaded?
-                        # Try clearing context if error is about content? No, just error msg.
-                        await update.message.reply_text(
-                            "عذراً، الخدمة مشغولة حالياً أو حدث خطأ. حاول مرة أخرى. 🙏",
-                            reply_markup=get_base_keyboard()
-                        )
-        except aiohttp.ClientError as e:
-            logger.error(f"Network error in API request for user {user_id}: {e}")
-            await update.message.reply_text(
-                f"عذراً، هناك مشكلة في الاتصال. الرجاء المحاولة مرة أخرى.{BOT_SIGNATURE}",
-                reply_markup=get_base_keyboard(),
-                parse_mode='HTML'
-            )
+                            await update.message.reply_text(
+                                f"{formatted_ai_response}{BOT_SIGNATURE}",
+                                reply_markup=get_base_keyboard(),
+                                parse_mode='HTML'
+                            )
+                            return # Exit function on success
+                        
+                        elif response.status in [400, 403, 429, 500, 503]:
+                            error_text = await response.text()
+                            logger.warning(f"API Error (Attempt {attempt+1}): {response.status} - {error_text}")
+                            key_manager.rotate_key()
+                            continue # Retry loop
+                        else:
+                            # Fatal error
+                            error_text = await response.text()
+                            logger.error(f"API Fatal Error for user {user_id}: {response.status}\n{error_text}")
+                            break # Exit loop
+            except aiohttp.ClientError as e:
+                logger.error(f"Network error in API request for user {user_id}: {e}")
+                key_manager.rotate_key()
+                continue
+            
+        # If we reach here, all retries failed
+        if thinking_message:
+             try:
+                await thinking_message.delete()
+             except: pass
+
+        await update.message.reply_text(
+            f"عذراً، هناك مشكلة في الاتصال أو الخوادم مشغولة. الرجاء المحاولة مرة أخرى.{BOT_SIGNATURE}",
+            reply_markup=get_base_keyboard(),
+            parse_mode='HTML'
+        )
     except Exception as e:
         logger.error(f"Outer error in handle_message for user {update.effective_user.id}: {e}", exc_info=True)
         await update.message.reply_text(
@@ -333,47 +352,68 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
 
         processing_message = await update.message.reply_text("جاري معالجة الصورة... ⏳")
         headers = {"Content-Type": "application/json"}
-        # Use main API URL if it supports vision (Flash models do)
         vision_url = GEMINI_API_URL 
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{vision_url}?key={GEMINI_API_KEY}",
-                headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=90)
-            ) as response:
-                if processing_message:
-                    try:
-                        await processing_message.delete()
-                    except Exception as e:
-                        logger.warning(f"Failed to delete processing_message: {e}")
+        max_retries = 2
+        success = False
+        for attempt in range(max_retries):
+            current_key = key_manager.get_current_key()
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{vision_url}?key={current_key}",
+                        headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=90)
+                    ) as response:
+                        if response.status == 200:
+                            if processing_message:
+                                try:
+                                    await processing_message.delete()
+                                    processing_message = None
+                                except Exception as e:
+                                    logger.warning(f"Failed to delete processing_message: {e}")
 
-                if response.status == 200:
-                    response_data = await response.json()
+                            response_data = await response.json()
 
-                    ai_response_text = "عذراً، لم أتمكن من تحليل الصورة."
-                    try:
-                        ai_response_text = response_data['candidates'][0]['content']['parts'][0]['text']
-                    except (KeyError, IndexError, TypeError) as e:
-                        logger.error(f"Error parsing Vision API response: {e}\nResponse: {response_data}")
+                            ai_response_text = "عذراً، لم أتمكن من تحليل الصورة."
+                            try:
+                                ai_response_text = response_data['candidates'][0]['content']['parts'][0]['text']
+                            except (KeyError, IndexError, TypeError) as e:
+                                logger.error(f"Error parsing Vision API response: {e}\nResponse: {response_data}")
 
-                    formatted_response = format_message(ai_response_text)
-                    
-                    # Add model response to history
-                    conversation_manager.add_message(user_id, "model", ai_response_text)
+                            formatted_response = format_message(ai_response_text)
+                            
+                            # Add model response to history
+                            conversation_manager.add_message(user_id, "model", ai_response_text)
 
-                    await update.message.reply_text(
-                        f"{formatted_response}{BOT_SIGNATURE}",
-                        reply_markup=get_base_keyboard(),
-                        parse_mode='HTML'
-                    )
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Vision API Error for user {user_id}: {response.status}\n{error_text}")
-                    await update.message.reply_text(
-                        f"عذراً، معالجة الصور متوقفة مؤقتاً أو حدث خطأ.{BOT_SIGNATURE}",
-                        reply_markup=get_base_keyboard(),
-                        parse_mode='HTML'
-                    )
+                            await update.message.reply_text(
+                                f"{formatted_response}{BOT_SIGNATURE}",
+                                reply_markup=get_base_keyboard(),
+                                parse_mode='HTML'
+                            )
+                            success = True
+                            break # Exit loop
+                        elif response.status in [400, 403, 429, 500, 503]:
+                            logger.warning(f"Vision API Error (Attempt {attempt+1}): {response.status}")
+                            key_manager.rotate_key()
+                            continue
+                        else:
+                            error_text = await response.text()
+                            logger.error(f"Vision API Error for user {user_id}: {response.status}\n{error_text}")
+                            break
+            except Exception as e:
+                logger.error(f"Vision Network Error: {e}")
+                key_manager.rotate_key()
+                continue
+        
+        if not success:
+             if processing_message:
+                try: await processing_message.delete()
+                except: pass
+             await update.message.reply_text(
+                f"عذراً، معالجة الصور متوقفة مؤقتاً أو حدث خطأ.{BOT_SIGNATURE}",
+                reply_markup=get_base_keyboard(),
+                parse_mode='HTML'
+            )
 
     except Exception as e:
         logger.error(f"Unhandled Error in handle_photo for user {update.effective_user.id}: {e}", exc_info=True)

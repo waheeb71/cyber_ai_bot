@@ -11,9 +11,10 @@ import io
 import logging
 from collections import deque
 
-from ..config import GEMINI_API_KEY, GEMINI_API_URL, GEMINI_VISION_API_URL, BOT_SIGNATURE
+from ..config import GEMINI_API_KEYS, GEMINI_API_URL, GEMINI_VISION_API_URL, BOT_SIGNATURE
 from ..utils.search import search_exa
 from ..utils.formatting import format_message, add_signature
+from ..utils.key_manager import KeyManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class GroupHandler:
         self.message_history = {}  # Dictionary to store message history for each group (for replies)
         self.group_context = {}    # Dictionary to store sliding window context for each group
         self.cleanup_task = None
+        self.key_manager = KeyManager(GEMINI_API_KEYS)
 
     async def start_cleanup_task(self):
         """بدء مهمة تنظيف الرسائل القديمة"""
@@ -193,7 +195,7 @@ class GroupHandler:
 
         # --- 1. Sliding Window Context Management ---
         if chat.id not in self.group_context:
-            self.group_context[chat.id] = deque(maxlen=5)
+            self.group_context[chat.id] = deque(maxlen=3)
         
         # Store current message in sliding window (Text only)
         if message.text:
@@ -332,22 +334,32 @@ Time: {datetime.now().strftime('%H:%M')}
             logger.error(f"DB Update Error: {e}")
 
     async def _call_gemini_vision(self, payload):
-        """Helper for Vision API"""
-        try:
-             headers = {"Content-Type": "application/json"}
-             response = requests.post(
-                 f"{GEMINI_VISION_API_URL}?key={GEMINI_API_KEY}",
-                 headers=headers,
-                 json=payload
-             )
-             if response.status_code == 200:
-                 return response.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No text returned.')
-             else:
-                 logger.error(f"Vision API Error: {response.text}")
-                 return "عذراً، حدث خطأ في تحليل الصورة."
-        except Exception as e:
-            logger.error(f"Vision Request Error: {e}")
-            return "عذراً، حدث خطأ في الاتصال."
+        """Helper for Vision API with Retry Logic"""
+        max_retries = 2
+        for attempt in range(max_retries):
+            current_key = self.key_manager.get_current_key()
+            try:
+                headers = {"Content-Type": "application/json"}
+                response = requests.post(
+                    f"{GEMINI_VISION_API_URL}?key={current_key}",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
+                )
+                if response.status_code == 200:
+                    return response.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No text returned.')
+                elif response.status_code in [400, 403, 429, 500, 503]:
+                     logger.warning(f"Vision API Error (Attempt {attempt+1}): {response.status_code} - {response.text}")
+                     self.key_manager.rotate_key()
+                     continue
+                else:
+                    logger.error(f"Vision API Error: {response.text}")
+                    return "عذراً، حدث خطأ في تحليل الصورة."
+            except Exception as e:
+                logger.error(f"Vision Request Error: {e}")
+                self.key_manager.rotate_key()
+                continue
+        return "عذراً، خدمة الصور مشغولة حالياً."
 
     async def broadcast_message(self, context: ContextTypes.DEFAULT_TYPE, message: str):
         """إرسال رسالة إلى جميع المجموعات"""
@@ -366,82 +378,105 @@ Time: {datetime.now().strftime('%H:%M')}
         return success_count, fail_count
 
     async def get_ai_response(self, text: str) -> str:
-        """الحصول على رد من Gemini API"""
-        try:
-            headers = {
-                "Content-Type": "application/json",
-            }
+        """الحصول على رد من Gemini API مع إعادة المحاولة وتدوير المفاتيح"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            current_key = self.key_manager.get_current_key()
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                }
 
-            data = {
-                "contents": [{
-                    "parts": [{
-                       "text": text
+                data = {
+                    "contents": [{
+                        "parts": [{
+                           "text": text
+                        }]
                     }]
-                }]
-            }
+                }
 
-            response = requests.post(
-                f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-                headers=headers,
-                json=data
-            )
+                response = requests.post(
+                    f"{GEMINI_API_URL}?key={current_key}",
+                    headers=headers,
+                    json=data,
+                    timeout=30
+                )
 
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get("candidates"):
-                    ai_response = response_data["candidates"][0]["content"]["parts"][0]["text"]
+                if response.status_code == 200:
+                    response_data = response.json()
+                    if response_data.get("candidates"):
+                        ai_response = response_data["candidates"][0]["content"]["parts"][0]["text"]
 
-                    # تعديل النص في اي مكان في الرسالة
-                    parts = ai_response.split("تم تدريبي بواسطة جوجل")
-                    ai_response = "تم تدريبي بواسطة جوجل وتم ربطي في البوت وبرمجتي لاتعامل مع المستخدمين من قبل وهيب الشرعبي".join(parts)
+                        # تعديل النص
+                        parts = ai_response.split("تم تدريبي بواسطة جوجل")
+                        ai_response = "تم تدريبي بواسطة جوجل وتم ربطي في البوت وبرمجتي لاتعامل مع المستخدمين من قبل وهيب الشرعبي".join(parts)
 
-                    return ai_response
-            return "عذراً، لم أستطع فهم طلبك. هل يمكنك إعادة صياغة السؤال؟"
-        except Exception as e:
-            raise Exception("حدث خطأ في الاتصال مع Gemini API")
+                        return ai_response
+                elif response.status_code in [400, 403, 429, 500, 503]:
+                    logger.warning(f"Gemini API Error (Attempt {attempt+1}): {response.status_code} - {response.text}")
+                    self.key_manager.rotate_key()
+                    continue
+                else:
+                     logger.error(f"Gemini API Error: {response.text}")
+                     return "عذراً، حدث خطأ غير متوقع."
+                     
+            except Exception as e:
+                logger.error(f"Request Exception: {e}")
+                self.key_manager.rotate_key()
+                continue
+
+        return "عذراً، الخوادم مشغولة جداً حالياً. حاول مرة أخرى لاحقاً."
 
     async def get_image_analysis(self, image_data: bytes, text: str) -> str:
         """تحليل الصورة باستخدام Gemini Vision API"""
-        # ... (Existing logic, but we might want to update prompt logic here too if needed, but the main handle_message covers the primary image flow)
-        # Note: The main logic for group images seems to be inside handle_message, so this method might be unused or secondary.
-        # I will keep it as is for now to avoid breaking other flows, but handle_message handles the group image flow directly.
-        try:
-            # تحويل الصورة إلى Base64
-            image_base64 = base64.b64encode(image_data).decode('utf-8')
+        max_retries = 2
+        for attempt in range(max_retries):
+            current_key = self.key_manager.get_current_key()
+            try:
+                # تحويل الصورة إلى Base64
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
 
-            headers = {
-                "Content-Type": "application/json",
-            }
+                headers = {
+                    "Content-Type": "application/json",
+                }
 
-            data = {
-                "contents": [{
-                    "parts": [
-                        {
-                            "text": f"{text} (استخدم ايموجي تفاعلي مناسب مع كل فكرة في الرد)"
-                        },
-                        {
-                            "inline_data": {
-                                "mime_type": "image/jpeg",
-                                "data": image_base64
+                data = {
+                    "contents": [{
+                        "parts": [
+                            {
+                                "text": f"{text} (استخدم ايموجي تفاعلي مناسب مع كل فكرة في الرد)"
+                            },
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": image_base64
+                                }
                             }
-                        }
-                    ]
-                }]
-            }
+                        ]
+                    }]
+                }
 
-            response = requests.post(
-                f"{GEMINI_VISION_API_URL}?key={GEMINI_API_KEY}",
-                headers=headers,
-                json=data
-            )
+                response = requests.post(
+                    f"{GEMINI_VISION_API_URL}?key={current_key}",
+                    headers=headers,
+                    json=data,
+                    timeout=45
+                )
 
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get("candidates"):
-                    return response_data["candidates"][0]["content"]["parts"][0]["text"]
-            return "عذراً، لم أستطع تحليل الصورة. هل يمكنك المحاولة مرة أخرى؟"
-        except Exception as e:
-            raise Exception(f"حدث خطأ في تحليل الصورة: {str(e)}")
+                if response.status_code == 200:
+                    response_data = response.json()
+                    if response_data.get("candidates"):
+                        return response_data["candidates"][0]["content"]["parts"][0]["text"]
+                elif response.status_code in [400, 403, 429, 500, 503]:
+                    logger.warning(f"Vision Analysis Error (Attempt {attempt+1}): {response.status_code}")
+                    self.key_manager.rotate_key()
+                    continue
+            except Exception as e:
+                 logger.error(f"Vision Analysis Exception: {e}")
+                 self.key_manager.rotate_key()
+                 continue
+
+        return "عذراً، لم أستطع تحليل الصورة. هل يمكنك المحاولة مرة أخرى؟"
 
     async def get_image_from_url(self, url: str) -> bytes:
         """تحميل الصورة من عنوان URL"""
