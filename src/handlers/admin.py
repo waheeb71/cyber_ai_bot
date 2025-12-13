@@ -197,190 +197,17 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == "list_premium":
         await show_premium_users(query, db)
     elif query.data == "forward_ad":
-        await start_forward_ad(query, context)
-    elif query.data == "confirm_broadcast":
-        broadcast_msg = context.user_data.get('broadcast_message')
-        confirm_msg = context.user_data.get('confirm_msg')
+        from .broadcast import start_broadcast
+        await start_broadcast(query, context)
+    elif query.data == "admin_broadcast":
+        # New broadcast system
+        from .broadcast import start_broadcast
+        await start_broadcast(query, context)
 
-        if broadcast_msg and confirm_msg:
-            await confirm_msg.edit_text("⏳ جاري إرسال الإعلان...")
-
-            success_count = 0
-            fail_count = 0
-
-            # Get all users from database
-            all_users = db.get_all_user_ids_for_broadcast()
-            total_users = len(all_users)
-
-            # Send to each user
-            for user_id in all_users:
-                try:
-                    # Skip banned users
-                    if db.is_user_banned(int(user_id)):
-                        continue
-
-                    if broadcast_msg.photo:
-                        await context.bot.send_photo(
-                            chat_id=int(user_id),
-                            photo=broadcast_msg.photo[-1].file_id,
-                            caption=broadcast_msg.caption
-                        )
-                    elif broadcast_msg.video:
-                        await context.bot.send_video(
-                            chat_id=int(user_id),
-                            video=broadcast_msg.video.file_id,
-                            caption=broadcast_msg.caption
-                        )
-                    elif broadcast_msg.text:
-                        await context.bot.send_message(
-                            chat_id=int(user_id),
-                            text=broadcast_msg.text
-                        )
-                    success_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to send broadcast to user {user_id}: {str(e)}")
-                    fail_count += 1
-
-            # Send final status
-            final_status = (
-                f"✅ تم إرسال الإعلان بنجاح!\n\n"
-                f"📊 إحصائيات:\n"
-                f"- عدد المستخدمين الكلي: {total_users}\n"
-                f"- تم الإرسال بنجاح: {success_count}\n"
-                f"- فشل الإرسال: {fail_count}"
-            )
-            await confirm_msg.edit_text(final_status)
-
-            # Clear user data
-            context.user_data.clear()
-
-            # Show admin panel after 3 seconds
-            await asyncio.sleep(3)
-            await query.message.reply_text(
-                "🔰 لوحة تحكم المشرف\nاختر أحد الخيارات التالية:",
-                reply_markup=get_admin_keyboard()
-            )
-
-    elif query.data == "cancel_broadcast":
-        context.user_data.clear()
-        await query.message.edit_text(
-            "❌ تم إلغاء إرسال الإعلان",
-            reply_markup=None
-        )
-        await asyncio.sleep(2)
-        await query.message.reply_text(
-            "🔰 لوحة تحكم المشرف\nاختر أحد الخيارات التالية:",
-            reply_markup=get_admin_keyboard()
-        )
-
-    elif query.data == "confirm_forward_ad":
-        forward_msg = context.user_data.get('forward_message')
-        confirm_msg = context.user_data.get('confirm_msg')
-
-        if forward_msg and confirm_msg:
-            await confirm_msg.edit_text("⏳ جاري إرسال الإعلان...")
-
-            success_count = 0
-            fail_count = 0
-
-            # Get all users from database
-            all_users = db.get_all_user_ids_for_broadcast()
-            total_users = len(all_users)
-
-            # Handle forwarded advertisement
-            buttons = None
-            caption = forward_msg.caption if forward_msg.caption else ""
-            text_content = forward_msg.text if forward_msg.text else ""
-
-            # Check if there are button configurations in the text or caption
-            content = text_content if text_content else caption
-            if content and "|" in content:
-                lines = content.split("\n")
-                button_lines = [line for line in lines if "|" in line]
-                content_lines = [line for line in lines if "|" not in line]
-
-                # Create buttons
-                keyboard = []
-                for line in button_lines:
-                    try:
-                        title, url = [x.strip() for x in line.split("|")]
-                        keyboard.append([InlineKeyboardButton(title, url=url)])
-                    except Exception as e:
-                        logger.error(f"Error parsing buttons: {str(e)}")
-                        await confirm_msg.edit_text(f"❌ خطأ في تنسيق الأزرار: {str(e)}")
-                        return
-
-                if keyboard:
-                    buttons = InlineKeyboardMarkup(keyboard)
-                content = "\n".join(content_lines)
-                if forward_msg.text:
-                    text_content = content
-                else:
-                    caption = content
-
-            # Send to each user
-            for user_id in all_users:
-                try:
-                    # Skip banned users
-                    if db.is_user_banned(int(user_id)):
-                        continue
-
-                    if forward_msg.photo:
-                        await context.bot.send_photo(
-                            chat_id=int(user_id),
-                            photo=forward_msg.photo[-1].file_id,
-                            caption=caption,
-                            reply_markup=buttons
-                        )
-                    elif forward_msg.video:
-                        await context.bot.send_video(
-                            chat_id=int(user_id),
-                            video=forward_msg.video.file_id,
-                            caption=caption,
-                            reply_markup=buttons
-                        )
-                    elif forward_msg.text:
-                        await context.bot.send_message(
-                            chat_id=int(user_id),
-                            text=text_content,
-                            reply_markup=buttons
-                        )
-                    success_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to send forward to user {user_id}: {str(e)}")
-                    fail_count += 1
-
-            # Send final status
-            final_status = (
-                f"✅ تم إرسال الإعلان بنجاح!\n\n"
-                f"📊 إحصائيات:\n"
-                f"- عدد المستخدمين الكلي: {total_users}\n"
-                f"- تم الإرسال بنجاح: {success_count}\n"
-                f"- فشل الإرسال: {fail_count}"
-            )
-            await confirm_msg.edit_text(final_status)
-
-            # Clear user data
-            context.user_data.clear()
-
-            # Show admin panel after 3 seconds
-            await asyncio.sleep(3)
-            await query.message.reply_text(
-                "🔰 لوحة تحكم المشرف\nاختر أحد الخيارات التالية:",
-                reply_markup=get_admin_keyboard()
-            )
-
-    elif query.data == "cancel_forward_ad":
-        context.user_data.clear()
-        await query.message.edit_text(
-            "❌ تم إلغاء إرسال الإعلان",
-            reply_markup=None
-        )
-        await asyncio.sleep(2)
-        await query.message.reply_text(
-            "🔰 لوحة تحكم المشرف\nاختر أحد الخيارات التالية:",
-            reply_markup=get_admin_keyboard()
-        )
+    elif query.data == "forward_ad":
+         # Use same broadcast system for forwarding
+        from .broadcast import start_broadcast
+        await start_broadcast(query, context)
 
     elif query.data == "confirm_ban":
         user_id = context.user_data.get('ban_user_id')
@@ -649,6 +476,12 @@ async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ الرجاء إدخال معرف صحيح.")
         return
 
+    # Check for new broadcast state
+    from .broadcast import handle_broadcast_input, WAITING_MESSAGE
+    if context.user_data.get('broadcast_state') == WAITING_MESSAGE:
+        await handle_broadcast_input(update, context, db)
+        return
+
     # If no specific state or unknown state, show admin panel
     await update.message.reply_text(
         "🔰 لوحة تحكم المشرف\nاختر أحد الخيارات التالية:",
@@ -776,169 +609,7 @@ async def show_users(query, db):
 
     await query.message.edit_text(users_text, reply_markup=get_admin_keyboard())
 
-async def start_broadcast(query: Update.callback_query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Start broadcast message process."""
-    context.user_data['admin_state'] = 'waiting_for_broadcast'
-    await query.message.edit_text(
-        "📢 إرسال إعلان للمستخدمين\n\n"
-        "قم بإرسال الإعلان الذي تريد إرساله للمستخدمين.\n"
-        "يمكنك إرسال:\n"
-        "- نص\n"
-        "- صورة مع نص\n"
-        "- فيديو مع نص\n\n"
-        "لإضافة أزرار، أضف في نهاية النص:\n"
-        "عنوان الزر | الرابط\n\n"
-        "مثال:\n"
-        "مرحباً بكم في قناتنا\n"
-        "اشترك الآن | https://t.me/channel\n\n"
-        "للإلغاء، أرسل /cancel",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ إلغاء", callback_data="admin_back")
-        ]])
-    )
 
-async def show_ban_menu(query):
-    """Show ban management menu."""
-    await query.message.edit_text(
-        "🚫 إدارة الحظر\nاختر أحد الخيارات:",
-        reply_markup=get_ban_keyboard()
-    )
-
-async def start_ban(query: Update.callback_query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Start ban user process."""
-    context.user_data['admin_state'] = 'waiting_for_ban'
-    await query.message.edit_text(
-        "🚫 حظر مستخدم\n\n"
-        "قم بإرسال معرف المستخدم (ID) الذي تريد حظره.\n\n"
-        "للإلغاء، أرسل /cancel",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ إلغاء", callback_data="admin_back")
-        ]])
-    )
-
-async def start_unban(query: Update.callback_query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Start unban user process."""
-    context.user_data['admin_state'] = 'waiting_for_unban'
-    await query.message.edit_text(
-        "✅ إلغاء حظر مستخدم\n\n"
-        "قم بإرسال معرف المستخدم (ID) الذي تريد إلغاء حظره.\n\n"
-        "للإلغاء، أرسل /cancel",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ إلغاء", callback_data="admin_back")
-        ]])
-    )
-
-async def show_premium_users(query, db):
-    """Show list of premium users."""
-    premium_users = db.get_premium_users_ids()
-
-    if not premium_users:
-        await query.message.edit_text(
-            "📝 لا يوجد مستخدمين مميزين حالياً.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]])
-        )
-        return
-
-    # Get user details for each premium user
-    premium_users_details = []
-    for user_id in premium_users:
-        user_data = db.get_user_stats(int(user_id))
-        if user_data:
-            username = user_data.get('username', 'غير معروف')
-            first_name = user_data.get('first_name', 'غير معروف')
-            premium_users_details.append(f"👤 المعرف: {user_id}\n   الاسم: {first_name}\n   المستخدم: @{username if username else 'غير متوفر'}\n")
-
-    # Create the message
-    message = "👑 قائمة المستخدمين المميزين:\n\n"
-    message += "\n".join(premium_users_details)
-    message += f"\n\nالعدد الإجمالي: {len(premium_users)} مستخدم"
-
-    # Split message if it's too long
-    if len(message) > 4096:
-        message = message[:4000] + f"\n\n... والمزيد\nالعدد الإجمالي: {len(premium_users)} مستخدم"
-
-    await query.message.edit_text(
-        message,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]])
-    )
-
-async def show_banned_users(query, db):
-    """Show list of banned users."""
-    banned_users = db.get_banned_users_ids()
-    if not banned_users:
-        await query.message.edit_text(
-            "لا يوجد مستخدمين محظورين حالياً. ✅",
-            reply_markup=get_admin_keyboard()
-        )
-        return
-
-    banned_users_text = "📋 قائمة المستخدمين المحظورين:\n\n"
-    for user_id in banned_users:
-        user_data = db.get_user_info(int(user_id)) or {}
-        username = user_data.get("username", "")
-        first_name = user_data.get("first_name", "")
-        banned_users_text += f"- الاسم: {first_name}\n  المعرف: @{username}\n  رقم المعرف: {user_id}\n\n"
-
-    await query.message.edit_text(
-        banned_users_text,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]
-        ])
-    )
-
-async def start_forward_ad(query: Update.callback_query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Start forward advertisement process."""
-    # Clear any previous state
-    context.user_data.clear()
-    # Set new state
-    context.user_data["admin_state"] = "waiting_forward_ad"
-    await query.edit_message_text(
-        "📤 تحويل إعلان\n\n"
-        "قم بإرسال الإعلان الذي تريد تحويله (نص، صورة، فيديو، الخ).\n"
-        "يمكنك إضافة أزرار للإعلان عن طريق إرسال الأزرار بالتنسيق التالي:\n"
-        "عنوان الزر | الرابط\n"
-        "عنوان الزر 2 | الرابط 2\n\n"
-        "أو أرسل الإعلان بدون أزرار مباشرة.\n\n"
-        "للإلغاء، أرسل /cancel"
-    )
-
-async def handle_forward_ad_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> None:
-    """Handle forwarded advertisement message."""
-    if not context.user_data.get("admin_state"):
-        return
-
-    message = update.message
-
-    if message.text == "/cancel":
-        context.user_data.clear()
-        await message.reply_text(
-            "تم إلغاء العملية الحالية.",
-            reply_markup=get_admin_keyboard()
-        )
-        return
-
-    if context.user_data["admin_state"] == "waiting_forward_ad":
-        # Get all users from database
-        all_users = db.data["users"].keys()
-        total_users = len(all_users)
-
-        # Send confirmation message with user count
-        confirm_msg = await message.reply_text(
-            f"⚠️ تأكيد إرسال الإعلان\n\n"
-            f"سيتم إرسال الإعلان إلى {total_users} مستخدم\n"
-            f"هل تريد المتابعة؟",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("✅ نعم، أرسل", callback_data="confirm_forward_ad"),
-                    InlineKeyboardButton("❌ إلغاء", callback_data="cancel_forward_ad")
-                ]
-            ])
-        )
-
-        # Store the message and confirmation message
-        context.user_data['forward_message'] = message
-        context.user_data['confirm_msg'] = confirm_msg
-        return
 
 async def show_groups(query, db):
     """Show groups information."""
