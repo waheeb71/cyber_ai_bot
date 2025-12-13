@@ -318,7 +318,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
                     error_text = await response.text()
                     logger.error(f"Vision API Error for user {user_id}: {response.status}\n{error_text}")
                     await update.message.reply_text(
-                        f"عذراً، حدث خطأ في معالجة الصورة. الرجاء المحاولة مرة أخرى.{BOT_SIGNATURE}",
+                        f"عذراً، معالجة الصور متوقفة مؤقتاً.{BOT_SIGNATURE}",
                         reply_markup=get_base_keyboard(),
                         parse_mode='HTML'
                     )

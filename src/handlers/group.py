@@ -297,11 +297,11 @@ Group: {group_title}
                             'timestamp': time.time()
                         }
                     else:
-                        await processing_msg.edit_text(" عذراً، حدث خطأ في معالجة الصورة. الرجاء المحاولة مرة أخرى.")
+                        await processing_msg.edit_text(" عذراً، معالجة الصور متوقفة مؤقتاً")
                         logger.error(f"API Error: {response.status_code}\n{response.text}")
 
             except Exception as e:
-                await message.reply_text(" عذراً، حدث خطأ أثناء تحليل الصورة. الرجاء المحاولة مرة أخرى.")
+                await message.reply_text(" معالجة الصور متوقفة مؤقتاً")
                 logger.error(f"Error processing image: {str(e)}")
             return
 
