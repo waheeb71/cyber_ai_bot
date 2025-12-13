@@ -13,7 +13,7 @@ from .prompt_management import (
     start_edit_prompt, reset_to_default_prompt, handle_new_prompt,
     get_prompt_keyboard
 )
-from .broadcast import start_broadcast
+from .broadcast import start_broadcast, handle_broadcast_callback
 
 def is_admin(username: str) -> bool:
     """Check if user is admin."""
@@ -199,6 +199,10 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await show_premium_users(query, db)
     elif query.data == "forward_ad":
         await start_broadcast(update, context)
+    
+    # Delegate broadcast actions
+    elif query.data.startswith("broadcast_"):
+        await handle_broadcast_callback(update, context, db)
 
     elif query.data == "confirm_ban":
         user_id = context.user_data.get('ban_user_id')
