@@ -5,7 +5,7 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Load multiple keys from a comma-separated string or list
+
 _keys_str = os.getenv("GEMINI_API_KEYS", "")
 GEMINI_API_KEYS = [k.strip() for k in _keys_str.split(",") if k.strip()]
 if not GEMINI_API_KEYS and GEMINI_API_KEY:
@@ -20,12 +20,12 @@ if not POSTGRES_URL:
     logger.warning("POSTGRES_URL not found in environment variables. Database will not function properly.")
 
 
-# Admin Notification ID - try to get from env, otherwise use fallback
+
 admin_notification_id_env = os.getenv("ADMIN_NOTIFICATION_ID")
 if admin_notification_id_env:
     ADMIN_NOTIFICATION_ID = int(admin_notification_id_env)
 else:
-    ADMIN_NOTIFICATION_ID = 5887234832  # Fallback ID
+    ADMIN_NOTIFICATION_ID = 5887234832 
     logger.warning(f"ADMIN_NOTIFICATION_ID not found in environment variables. Using fallback value: {ADMIN_NOTIFICATION_ID}")
 
 ADMIN_USERS = ["WAT4F", "M984D", "A66S6", "HTTHT"]

@@ -959,7 +959,17 @@ async def show_groups(query, db):
         for i, group in enumerate(groups[:5], 1):
             group_name = group.get('title', 'مجموعة غير معروفة')
             message_count = group.get('message_count', 0)
-            last_active = datetime.fromisoformat(group.get('last_active', datetime.now().isoformat()))
+            
+            # Safe date parsing
+            last_active_str = group.get('last_active')
+            if isinstance(last_active_str, str):
+                try:
+                    last_active = datetime.fromisoformat(last_active_str)
+                except ValueError:
+                    last_active = datetime.now()
+            else:
+                last_active = datetime.now()
+                
             days_inactive = (datetime.now() - last_active).days
 
             status = "✅ نشطة" if message_count > 0 else "⚠️ غير نشطة"
