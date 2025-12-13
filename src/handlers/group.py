@@ -256,9 +256,10 @@ class GroupHandler:
 
             # If it's a specific reply, get the pair
             specific_reply_context = ""
-            if is_reply and message.reply_to_message_id:
-                if chat.id in self.message_history and message.reply_to_message_id in self.message_history[chat.id]:
-                    prev = self.message_history[chat.id][message.reply_to_message_id]
+            if is_reply and message.reply_to_message:
+                reply_msg_id = message.reply_to_message.message_id
+                if chat.id in self.message_history and reply_msg_id in self.message_history[chat.id]:
+                    prev = self.message_history[chat.id][reply_msg_id]
                     specific_reply_context = f"User is replying to this:\nBot: {prev['response']}\n(Original Question: {prev['question']})"
                 elif message.reply_to_message.text:
                     specific_reply_context = f"User is replying to this Bot Message:\n{message.reply_to_message.text}"

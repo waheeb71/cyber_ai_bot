@@ -4,7 +4,8 @@ import base64
 import asyncio
 import html
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
+from collections import deque
 
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -19,7 +20,48 @@ from .admin import is_admin, admin_panel, handle_admin_message
 
 logger = logging.getLogger(__name__)
 
-conversation_history: Dict[int, List[Dict]] = {}
+class ConversationManager:
+    def __init__(self, max_history: int = 15):
+        self.histories: Dict[int, List[Dict]] = {}
+        self.max_history = max_history
+
+    def get_history(self, user_id: int) -> List[Dict]:
+        if user_id not in self.histories:
+            self.histories[user_id] = []
+        return self.histories[user_id]
+
+    def add_message(self, user_id: int, role: str, text: str, image_data: str = None):
+        if user_id not in self.histories:
+            self.histories[user_id] = []
+        
+        parts = [{"text": text}]
+        if image_data:
+            parts.append({
+                "inline_data": {
+                    "mime_type": "image/jpeg",
+                    "data": image_data
+                }
+            })
+            
+        self.histories[user_id].append({
+            "role": role,
+            "parts": parts
+        })
+        
+        # Trim history (keep last max_history messages)
+        # Ensure we don't cut in the middle of a turn if possible, but simple trimming is okay for now.
+        if len(self.histories[user_id]) > self.max_history:
+            removed = self.histories[user_id][:-self.max_history]
+            self.histories[user_id] = self.histories[user_id][-self.max_history:]
+            # If the new first message is 'model', remove it to start with 'user' if strictly needed,
+            # but Gemini usually handles it. To be safe:
+            if self.histories[user_id] and self.histories[user_id][0]['role'] == 'model':
+                self.histories[user_id].pop(0)
+
+    def clear_history(self, user_id: int):
+        self.histories[user_id] = []
+
+conversation_manager = ConversationManager()
 subscription_cache: Dict[int, tuple] = {}
 SUBSCRIPTION_CACHE_DURATION = 60  # seconds
 
@@ -82,7 +124,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> None:
         await update.message.reply_text("عذراً، تم حظرك من استخدام البوت.")
         return
 
-    conversation_history[user_id] = []
+    conversation_manager.clear_history(user_id)
     welcome_message = (
         f"مرحباً بك {user.first_name} في بوت المساعد الذكي للطلاب! 👋\n\n"
         "يمكنني مساعدتك في:\n"
@@ -125,12 +167,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                 return
 
         if user_message == "🔄 محادثة جديدة":
-            conversation_history[user_id] = []
+            conversation_manager.clear_history(user_id)
             await update.message.reply_text(
-                f"تم بدء محادثة جديدة! كيف يمكنني مساعدتك؟{BOT_SIGNATURE}",
+                f"تم مسح الذاكرة وبدء محادثة جديدة! كيف يمكنني مساعدتك؟{BOT_SIGNATURE}",
                 reply_markup=get_base_keyboard()
             )
             return
+
+        # ... (Search and Link Scan checks remain same) ...
         if user_message == "🔍 البحث في الويب":
             await update.message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
@@ -155,25 +199,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
 
         db.update_user_activity(user_id, "text")
 
-        if user_id not in conversation_history:
-            conversation_history[user_id] = []
+        # Add user message to history
+        conversation_manager.add_message(user_id, "user", user_message)
 
-        # Get active prompt from database
+        # Get active prompt from database for System Instruction
         prompt_template = db.get_active_prompt()
         
-        # Format prompt with user message
-        formatted_prompt = prompt_template.replace("{user_message}", user_message)
-
-        conversation_history[user_id].append({
-           "role": "user",
-          "parts": [{
-             "text": formatted_prompt
-    }]
-        })
-
-        messages_for_api = conversation_history[user_id][-10:]
+        # Prepare payload
+        history = conversation_manager.get_history(user_id)
+        
         payload = {
-            "contents": messages_for_api,
+            "system_instruction": {
+                "parts": [{"text": prompt_template}]
+            },
+            "contents": history,
             "generationConfig": {
                 "temperature": 0.7, "topK": 40, "topP": 0.95, "maxOutputTokens": 1024,
             }
@@ -186,7 +225,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-                    
                     headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=50)
                 ) as response:
                     if thinking_message:
@@ -207,11 +245,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                         # Format the raw text for displaying in Telegram
                         formatted_ai_response = format_message(ai_response_text)
 
-                        # Store the raw, unformatted text in history for the next API call
-                        conversation_history[user_id].append({
-                            "role": "model",
-                            "parts": [{"text": ai_response_text}]
-                        })
+                        # Add model response to history
+                        conversation_manager.add_message(user_id, "model", ai_response_text)
 
                         await update.message.reply_text(
                             f"{formatted_ai_response}{BOT_SIGNATURE}",
@@ -221,8 +256,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                     else:
                         error_text = await response.text()
                         logger.error(f"API Error for user {user_id}: {response.status}\n{error_text}")
+                        # Fallback: maybe context is corrupted or model overloaded?
+                        # Try clearing context if error is about content? No, just error msg.
                         await update.message.reply_text(
-                            "عذراً، الخدمة مشغولة حالياً. حاول مرة أخرى بعد قليل. 🙏",
+                            "عذراً، الخدمة مشغولة حالياً أو حدث خطأ. حاول مرة أخرى. 🙏",
                             reply_markup=get_base_keyboard()
                         )
         except aiohttp.ClientError as e:
@@ -276,17 +313,28 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
         base64_image = base64.b64encode(photo_data).decode('utf-8')
         caption = update.message.caption or "قم بتحليل هذه الصورة وشرح محتواها"
 
+        # Add image message to history
+        conversation_manager.add_message(user_id, "user", caption, base64_image)
+
+        # Get prompt and history
+        prompt_template = db.get_active_prompt()
+        history = conversation_manager.get_history(user_id)
+
+        # Note: We use the same URL for generic content generation which supports both text and images if using gemini-1.5-flash or similar.
+        # Ensure GEMINI_API_URL points to a multimodal model.
+        
         payload = {
-            "contents": [{"role": "user", "parts": [
-                {"text": caption},
-                {"inline_data": {"mime_type": "image/jpeg", "data": base64_image}}
-            ]}],
+            "system_instruction": {
+                "parts": [{"text": prompt_template}]
+            },
+            "contents": history,
             "generationConfig": {"temperature": 0.7, "topK": 32, "topP": 1, "maxOutputTokens": 4096}
         }
 
         processing_message = await update.message.reply_text("جاري معالجة الصورة... ⏳")
         headers = {"Content-Type": "application/json"}
-        vision_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        # Use main API URL if it supports vision (Flash models do)
+        vision_url = GEMINI_API_URL 
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -309,6 +357,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
                         logger.error(f"Error parsing Vision API response: {e}\nResponse: {response_data}")
 
                     formatted_response = format_message(ai_response_text)
+                    
+                    # Add model response to history
+                    conversation_manager.add_message(user_id, "model", ai_response_text)
+
                     await update.message.reply_text(
                         f"{formatted_response}{BOT_SIGNATURE}",
                         reply_markup=get_base_keyboard(),
@@ -318,7 +370,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
                     error_text = await response.text()
                     logger.error(f"Vision API Error for user {user_id}: {response.status}\n{error_text}")
                     await update.message.reply_text(
-                        f"عذراً، معالجة الصور متوقفة مؤقتاً.{BOT_SIGNATURE}",
+                        f"عذراً، معالجة الصور متوقفة مؤقتاً أو حدث خطأ.{BOT_SIGNATURE}",
                         reply_markup=get_base_keyboard(),
                         parse_mode='HTML'
                     )
