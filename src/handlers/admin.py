@@ -13,7 +13,7 @@ from .prompt_management import (
     start_edit_prompt, reset_to_default_prompt, handle_new_prompt,
     get_prompt_keyboard
 )
-from .broadcast import start_broadcast, handle_broadcast_callback
+from .broadcast import start_broadcast, handle_broadcast_callback, extract_buttons
 
 def is_admin(username: str) -> bool:
     """Check if user is admin."""
@@ -99,6 +99,8 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await show_groups(query, db)
     elif query.data == "groups_broadcast":
         await start_groups_broadcast(query, context)
+    elif query.data == "confirm_groups_broadcast":
+        await execute_groups_broadcast(query, context, db)
     elif query.data == "ban_user":
         await start_ban(query, context)
     elif query.data == "unban_user":
@@ -701,28 +703,39 @@ async def handle_groups_broadcast(message: str, context: ContextTypes.DEFAULT_TY
             )
             return
 
+        # Parse buttons and clean text
+        reply_markup, clean_text = extract_buttons(message.text)
+
         # رسالة تأكيد قبل الإرسال
         confirm_message = (
             f"📝 *مراجعة الرسالة*\n\n"
             f"الرسالة التي سيتم إرسالها:\n"
-            f"```\n{message.text}\n```\n\n"
-            f"📊 سيتم الإرسال إلى {len(groups)} مجموعة\n\n"
+            f"```\n{clean_text}\n```\n\n"
+            f"📊 سيتم الإرسال إلى {len(groups)} مجموعة\n"
+            f"👇 *الأزرار:* {'✅ موجودة' if reply_markup else '❌ لا يوجد'}\n\n"
             f"هل تريد المتابعة؟"
         )
 
         keyboard = [
-            [InlineKeyboardButton("✅ تأكيد الإرسال", callback_data="confirm_broadcast"),
+            [InlineKeyboardButton("✅ تأكيد الإرسال", callback_data="confirm_groups_broadcast"),
              InlineKeyboardButton("❌ إلغاء", callback_data="admin_groups")]
         ]
 
+        # Show preview with buttons if available
         confirm_msg = await message.reply_text(
             confirm_message,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
+        
+        if reply_markup:
+             await message.reply_text(
+                "👇 معاينة الأزرار:",
+                reply_markup=reply_markup
+            )
 
         # حفظ المعلومات للتأكيد
-        context.user_data['broadcast_message'] = message.text
+        context.user_data['broadcast_message'] = message.text # Keep original text with button defs
         context.user_data['confirm_msg_id'] = confirm_msg.message_id
 
     except Exception as e:
@@ -749,6 +762,9 @@ async def execute_groups_broadcast(query: Update.callback_query, context: Contex
         "0% مكتمل"
     )
 
+    # Parse buttons again for sending
+    reply_markup, clean_text = extract_buttons(message)
+
     groups = db.get_all_groups()
     success_count = 0
     fail_count = 0
@@ -758,8 +774,10 @@ async def execute_groups_broadcast(query: Update.callback_query, context: Contex
         try:
             await context.bot.send_message(
                 chat_id=int(group['chat_id']),
-                text=message,
-                parse_mode='Markdown'
+                text=clean_text,
+                parse_mode='Markdown',
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
             )
             success_count += 1
 
