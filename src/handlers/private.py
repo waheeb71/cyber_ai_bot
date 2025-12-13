@@ -286,7 +286,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
 
         processing_message = await update.message.reply_text("جاري معالجة الصورة... ⏳")
         headers = {"Content-Type": "application/json"}
-        vision_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent"
+        vision_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
