@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import base64
 import io
 import logging
+from collections import deque
 
 from ..config import GEMINI_API_KEY, GEMINI_API_URL, GEMINI_VISION_API_URL, BOT_SIGNATURE
 from ..utils.search import search_exa
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 class GroupHandler:
     def __init__(self, database):
         self.db = database
-        self.message_history = {}  # Dictionary to store message history for each group
+        self.message_history = {}  # Dictionary to store message history for each group (for replies)
+        self.group_context = {}    # Dictionary to store sliding window context for each group
         self.cleanup_task = None
 
     async def start_cleanup_task(self):
@@ -171,250 +173,180 @@ class GroupHandler:
             await update.message.reply_text("ℹ️ هذه المجموعة ليس لديها برومبت مخصص (تعمل بالوضع الافتراضي).")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """التعامل مع الرسائل في المجموعات"""
+        """التعامل مع الرسائل في المجموعات مع سياق ذكي"""
         message = update.message
-        chat_id = update.effective_chat.id
+        chat = update.effective_chat
         
-        if not message:
-             return
-
-        # التأكد من تشغيل مهمة التنظيف
-        await self.start_cleanup_task()
-
-        # التحقق من أن الرسالة في مجموعة
-        if update.effective_chat.type not in ['group', 'supergroup']:
+        if not message or not chat or chat.type not in ['group', 'supergroup']:
             return
 
+        # تنظيف الرسائل القديمة
+        await self.start_cleanup_task()
         # تحديث نشاط المجموعة
-        try:
-            if not self.db.update_group_activity(chat_id):
-                # إذا لم تكن المجموعة موجودة، نقوم بإضافتها
-                members_count = await update.effective_chat.get_member_count()
-                self.db.add_group(chat_id, update.effective_chat.title, members_count)
-                # تحديث النشاط مرة أخرى لزيادة عداد الرسائل
-                self.db.update_group_activity(chat_id)
-        except Exception as e:
-            logger.error(f"Error updating group activity: {e}")
+        await self._update_group_activity(chat, message)
 
         # Context Info
-        group_title = update.effective_chat.title
-        user_first_name = message.from_user.first_name if message.from_user else "Unknown"
-        user_username = message.from_user.username if message.from_user else "Unknown"
+        user = message.from_user
+        user_name = user.first_name if user else "Unknown"
+        user_username = user.username if user else "Unknown"
+        chat_title = chat.title
 
-        # معالجة الصور (مع أو بدون نص)
-        if message.photo:
-            try:
-                # الحصول على أفضل نسخة من الصورة
-                photo = message.photo[-1]
-                photo_file = await context.bot.get_file(photo.file_id)
+        # --- 1. Sliding Window Context Management ---
+        if chat.id not in self.group_context:
+            self.group_context[chat.id] = deque(maxlen=5)
+        
+        # Store current message in sliding window (Text only)
+        if message.text:
+            self.group_context[chat.id].append(f"{user_name}: {message.text}")
+        elif message.caption:
+            self.group_context[chat.id].append(f"{user_name}: [Image] {message.caption}")
+        # ---------------------------------------------
 
-                # تحميل الصورة
-                photo_data = await photo_file.download_as_bytearray()
-
-                # تحويل الصورة إلى base64
-                base64_image = base64.b64encode(photo_data).decode('utf-8')
-
-                # تحضير النص للتحليل
-                caption = None
-                if message.caption and 'cyber' in message.caption.lower():
-                    # Remove the word 'cyber' and any extra spaces
-                    caption = message.caption.lower().replace('cyber', '', 1).strip()
-
-                if caption is not None:
-                    # Get prompt
-                    custom_prompt = self.db.get_group_prompt(chat_id)
-                    system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
-
-                    full_prompt = f"""
-[System Context]
-User: {user_first_name} (@{user_username})
-Group: {group_title}
-
-[System Prompt]
-{system_prompt}
-
-[User Request]
-{caption} (Use emoji appropriately)
-"""
-                    # تحضير الطلب
-                    payload = {
-                        "contents": [{
-                            "role": "user",
-                            "parts": [
-                                {"text": full_prompt},
-                                {
-                                    "inline_data": {
-                                        "mime_type": "image/jpeg",
-                                        "data": base64_image
-                                    }
-                                }
-                            ]
-                        }],
-                        "generationConfig": {
-                            "temperature": 0.7,
-                            "topK": 32,
-                            "topP": 1,
-                            "maxOutputTokens": 4096,
-                        }
-                    }
-
-                    # إرسال رسالة انتظار
-                    processing_msg = await message.reply_text("🔍 جاري تحليل الصورة...")
-
-                    # إرسال الطلب إلى Gemini Vision API
-                    headers = {
-                        "Content-Type": "application/json"
-                    }
-
-                    response = requests.post(
-                        f"{GEMINI_VISION_API_URL}?key={GEMINI_API_KEY}",
-                        headers=headers,
-                        json=payload
-                    )
-
-                    if response.status_code == 200:
-                        response_data = response.json()
-                        ai_response = response_data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'عذراً، لم أستطع تحليل الصورة.')
-
-                        # تعديل النص في اي مكان في الرسالة
-                        parts = ai_response.split("تم تدريبي بواسطة جوجل")
-                        ai_response = "تم تدريبي بواسطة جوجل وتم ربطي في البوت وبرمجتي لاتعامل مع المستخدمين من قبل وهيب الشرعبي".join(parts)
-
-                        # تنسيق النص
-                        formatted_response = format_message(ai_response)
-                        final_response = add_signature(formatted_response)
-
-                        # إرسال التحليل
-                        sent_message = await processing_msg.edit_text(final_response, parse_mode='HTML')
-
-                        # حفظ الرد في التاريخ
-                        if chat_id not in self.message_history:
-                            self.message_history[chat_id] = {}
-                        self.message_history[chat_id][sent_message.message_id] = {
-                            'question': f"[صورة] {caption}",
-                            'response': final_response,
-                            'timestamp': time.time()
-                        }
-                    else:
-                        await processing_msg.edit_text(" عذراً، معالجة الصور متوقفة مؤقتاً")
-                        logger.error(f"API Error: {response.status_code}\n{response.text}")
-
-            except Exception as e:
-                await message.reply_text(" معالجة الصور متوقفة مؤقتاً")
-                logger.error(f"Error processing image: {str(e)}")
-            return
-
-        # التحقق من نوع الرسالة
-        if not message.text:
-            return
+        # Commands & Triggers
         if message.text == " محادثة جديدة":
-
-         self.message_history[chat_id] = {}  # Clear message history
-
-         await update.message.reply_text(
-          f"تم بدء محادثة جديدة.{BOT_SIGNATURE}",
-
-         )
-         return
+             self.message_history[chat.id] = {}
+             self.group_context[chat.id].clear()
+             await message.reply_text(f"تم بدء محادثة جديدة.{BOT_SIGNATURE}")
+             return
 
         if message.text == " البحث في الويب":
-            await update.message.reply_text("أدخل ما تريد البحث عنه:")
+            await message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
             return
+            
         if context.user_data.get('waiting_for_search_query'):
             await search_exa(update, context)
             context.user_data['waiting_for_search_query'] = False
             return
-        # الحالة الأولى: رسالة تبدأ بـ cyber
-        if message.text.lower().strip().startswith('cyber'):
-            query = message.text.lower().replace('cyber', '', 1).strip()
-            if query:
-                try:
-                    processing_msg = await message.reply_text("🤔 جاري التفكير...")
-                    
-                    # Get prompt
-                    custom_prompt = self.db.get_group_prompt(chat_id)
-                    system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
 
-                    # Construct context-aware prompt
-                    full_prompt = f"""
+        # Determine Query
+        query = None
+        is_reply = False
+        
+        # Case A: Reply to Bot
+        if message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id:
+            query = message.text
+            is_reply = True
+        # Case B: 'cyber' prefix
+        elif message.text and message.text.lower().strip().startswith('cyber'):
+             query = message.text.lower().replace('cyber', '', 1).strip()
+             if not query:
+                 await message.reply_text("👋 مرحباً! يرجى كتابة سؤالك بعد كلمة cyber")
+                 return
+        # Case C: Image with caption 'cyber'
+        elif message.photo and message.caption and 'cyber' in message.caption.lower():
+             query = message.caption.lower().replace('cyber', '', 1).strip()
+        
+        is_image_request = bool(message.photo and query)
+
+        # Basic Check
+        if not query and not is_image_request:
+            return
+
+        # --- Processing Request ---
+        try:
+            processing_msg = await message.reply_text("🤔 جاري التفكير..." if not is_image_request else "🔍 جاري تحليل الصورة...")
+
+            # Get Prompt
+            custom_prompt = self.db.get_group_prompt(chat.id)
+            system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
+
+            # Build Recent Context String
+            recent_discussion = "\n".join(list(self.group_context[chat.id])[:-1]) # Exclude current message from context to avoid duplication if needed, or include it. Let's exclude current.
+
+            # If it's a specific reply, get the pair
+            specific_reply_context = ""
+            if is_reply and message.reply_to_message_id:
+                if chat.id in self.message_history and message.reply_to_message_id in self.message_history[chat.id]:
+                    prev = self.message_history[chat.id][message.reply_to_message_id]
+                    specific_reply_context = f"User is replying to this:\nBot: {prev['response']}\n(Original Question: {prev['question']})"
+                elif message.reply_to_message.text:
+                    specific_reply_context = f"User is replying to this Bot Message:\n{message.reply_to_message.text}"
+
+            full_prompt = f"""
 [System Context]
-User: {user_first_name} (@{user_username})
-Group: {group_title}
+User: {user_name} (@{user_username})
+Group: {chat_title}
+Time: {datetime.now().strftime('%H:%M')}
 
 [System Prompt]
 {system_prompt}
+
+[Recent Group Discussion]
+{recent_discussion if recent_discussion else "No recent context."}
+
+{f"[Reply Context]{chr(10)}{specific_reply_context}" if specific_reply_context else ""}
 
 [User Request]
 {query}
 """
-
-                    response = await self.get_ai_response(full_prompt)
-                    formatted_response = format_message(response)
-                    full_response = f"{formatted_response}\n\n"
-                    final_response = add_signature(full_response)
-                    sent_message = await processing_msg.edit_text(final_response, parse_mode='HTML')
-
-                    # حفظ الرسالة والسؤال في التاريخ مع الوقت
-                    if chat_id not in self.message_history:
-                        self.message_history[chat_id] = {}
-                    self.message_history[chat_id][sent_message.message_id] = {
-                        'question': query,
-                        'response': final_response,
-                        'timestamp': time.time()
-                    }
-                except Exception as e:
-                    await message.reply_text(" عذراً، حدث خطأ أثناء معالجة طلبك. الرجاء المحاولة مرة أخرى.")
-                    logger.error(f"Error handling group message: {e}", exc_info=True)
-            else:
-                await message.reply_text("👋 مرحباً! يرجى كتابة سؤالك بعد كلمة cyber")
-            return
-
-        # الحالة الثانية: رد على رسالة البوت
-        if message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id:
-            try:
-                # استرجاع السياق السابق من التاريخ
-                previous_context = ""
-                if chat_id in self.message_history and message.reply_to_message.message_id in self.message_history[chat_id]:
-                    prev_msg = self.message_history[chat_id][message.reply_to_message.message_id]
-                    previous_context = f"السؤال السابق: {prev_msg['question']}\nالإجابة السابقة: {prev_msg['response']}\nالرد الجديد: {message.text}"
-                else:
-                    previous_context = message.text
-
-                processing_msg = await message.reply_text("🤔 جاري التفكير...")
+            # Handle Response
+            if is_image_request:
+                # Image Logic (Inline for simplicity)
+                photo = message.photo[-1]
+                photo_file = await context.bot.get_file(photo.file_id)
+                photo_data = await photo_file.download_as_bytearray()
+                base64_image = base64.b64encode(photo_data).decode('utf-8')
                 
-                # Get prompt
-                custom_prompt = self.db.get_group_prompt(chat_id)
-                system_prompt = custom_prompt if custom_prompt else self.db.get_prompt_content('default')
-                
-                full_prompt = f"""
-[System Context]
-User: {user_first_name} (@{user_username})
-Group: {group_title}
-
-[System Prompt]
-{system_prompt}
-
-[Conversation Context]
-{previous_context}
-"""
-
-                response = await self.get_ai_response(full_prompt)
-                formatted_response = format_message(response)
-                full_response = f"{formatted_response}\n\n"
-                final_response = add_signature(full_response)
-                sent_message = await processing_msg.edit_text(final_response, parse_mode='HTML')
-
-                # حفظ الرد الجديد في التاريخ مع الوقت
-                if chat_id not in self.message_history:
-                    self.message_history[chat_id] = {}
-                self.message_history[chat_id][sent_message.message_id] = {
-                    'question': message.text,
-                    'response': final_response,
-                    'timestamp': time.time()
+                payload = {
+                    "contents": [{
+                        "parts": [
+                            {"text": full_prompt},
+                            {"inline_data": {"mime_type": "image/jpeg", "data": base64_image}}
+                        ]
+                    }]
                 }
-            except Exception as e:
-                await message.reply_text("⚠️ عذراً، حدث خطأ أثناء معالجة ردك. الرجاء المحاولة مرة أخرى.")
+                response_text = await self._call_gemini_vision(payload)
+            else:
+                # Text Logic
+                response_text = await self.get_ai_response(full_prompt)
+
+            # Formatting
+            formatted_response = format_message(response_text)
+            final_response = add_signature(formatted_response)
+            
+            sent_message = await processing_msg.edit_text(final_response, parse_mode='HTML')
+
+            # Save to History
+            if chat.id not in self.message_history:
+                self.message_history[chat.id] = {}
+            self.message_history[chat.id][sent_message.message_id] = {
+                'question': query,
+                'response': final_response,
+                'timestamp': time.time()
+            }
+
+        except Exception as e:
+            logger.error(f"Error in handle_message: {e}", exc_info=True)
+            await message.reply_text("عذراً، حدث خطأ أثناء المعالجة.")
+
+    async def _update_group_activity(self, chat, message):
+        """Helper to update DB activity"""
+        try:
+            if not self.db.update_group_activity(chat.id):
+                members_count = await chat.get_member_count()
+                self.db.add_group(chat.id, chat.title, members_count)
+                self.db.update_group_activity(chat.id)
+        except Exception as e:
+            logger.error(f"DB Update Error: {e}")
+
+    async def _call_gemini_vision(self, payload):
+        """Helper for Vision API"""
+        try:
+             headers = {"Content-Type": "application/json"}
+             response = requests.post(
+                 f"{GEMINI_VISION_API_URL}?key={GEMINI_API_KEY}",
+                 headers=headers,
+                 json=payload
+             )
+             if response.status_code == 200:
+                 return response.json().get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No text returned.')
+             else:
+                 logger.error(f"Vision API Error: {response.text}")
+                 return "عذراً، حدث خطأ في تحليل الصورة."
+        except Exception as e:
+            logger.error(f"Vision Request Error: {e}")
+            return "عذراً، حدث خطأ في الاتصال."
 
     async def broadcast_message(self, context: ContextTypes.DEFAULT_TYPE, message: str):
         """إرسال رسالة إلى جميع المجموعات"""
