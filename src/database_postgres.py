@@ -762,10 +762,10 @@ class Database:
             if conn:
                 self._return_connection(conn)
 
-    def update_group_activity(self, chat_id: int):
-        """Update group activity."""
+    def update_group_activity(self, chat_id: int) -> bool:
+        """Update group activity. Returns True if group exists and was updated."""
         if not self.pool:
-            return
+            return False
         
         conn = None
         cursor = None
@@ -778,11 +778,14 @@ class Database:
                     last_active = %s
                 WHERE chat_id = %s
             """, (self._get_current_utc_iso(), chat_id))
+            updated = cursor.rowcount > 0
             conn.commit()
+            return updated
         except Exception as e:
             if conn:
                 conn.rollback()
             logger.error(f"Failed to update group activity: {e}", exc_info=True)
+            return False
         finally:
             if cursor:
                 cursor.close()

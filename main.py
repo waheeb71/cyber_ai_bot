@@ -15,6 +15,7 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler,
     ContextTypes,
+    ChatMemberHandler,
 )
 
 # --- Local Imports ---
@@ -75,6 +76,7 @@ def setup_handlers(app: Application):
     app.add_handler(CommandHandler('setprompt', group_handler_instance.set_prompt_command))
     app.add_handler(CommandHandler('resetprompt', group_handler_instance.reset_prompt_command))
     app.add_handler(CommandHandler('getprompt', group_handler_instance.get_prompt_command))
+    app.add_handler(ChatMemberHandler(group_handler_instance.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, group_handler_instance.handle_message))
 
     # --- Error Handler ---

@@ -53,17 +53,46 @@ class GroupHandler:
 
             await asyncio.sleep(3600)  # 1 hour in seconds
 
-    async def start_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """تسجيل المجموعة في قاعدة البيانات عند إضافة البوت"""
-        chat_id = update.effective_chat.id
-        chat_title = update.effective_chat.title
+    async def handle_my_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """التعامل مع تحديثات حالة البوت في المجموعة (إضافة/طرد)"""
+        chat = update.effective_chat
+        user = update.effective_user
+        status_change = update.my_chat_member.new_chat_member.status
+        old_status = update.my_chat_member.old_chat_member.status
 
-        if update.effective_chat.type in ['group', 'supergroup']:
-            self.db.add_group(chat_id, chat_title)
-            await update.message.reply_text(
-                "شكراً لإضافتي إلى المجموعة! 🤖\n"
-                "يمكنك استخدام الأمر /help للحصول على قائمة الأوامر المتاحة."
-            )
+        # التحقق من أن التحديث في مجموعة
+        if chat.type not in ['group', 'supergroup']:
+            return
+
+        # البوت تم إضافته للمجموعة
+        if status_change in ['member', 'administrator']:
+            logger.info(f"Bot added to group: {chat.title} ({chat.id})")
+            
+            # الحصول على عدد الأعضاء
+            members_count = await chat.get_member_count()
+            
+            # إضافة المجموعة لقاعدة البيانات
+            self.db.add_group(chat.id, chat.title, members_count)
+            
+            # إرسال رسالة ترحيبية إذا كانت إضافة جديدة
+            if old_status in ['left', 'kicked']:
+                welcome_text = (
+                    f"شكراً لإضافتي إلى {chat.title}! 🤖\n\n"
+                    "أنا بوت Cyber للذكاء الاصطناعي.\n"
+                    "يمكنك التحدث معي عن طريق كتابة 'cyber' ثم سؤالك.\n"
+                    "مثال: cyber كيف حالك؟\n\n"
+                    "أوامر المشرفين:\n"
+                    "/setprompt - تعيين شخصية مخصصة\n"
+                    "/resetprompt - استعادة الشخصية الافتراضية"
+                )
+                await context.bot.send_message(chat_id=chat.id, text=welcome_text)
+
+        # البوت تم طرده أو مغادرته
+        elif status_change in ['left', 'kicked']:
+            logger.info(f"Bot left group: {chat.title} ({chat.id})")
+            # يمكننا هنا تحديث الحالة في قاعدة البيانات إلى غير نشطة إذا أردنا
+            # حالياً add_group يقوم بالتحديث فقط، قد نحتاج لدالة لتعطيل المجموعة
+            pass
 
 
 
@@ -157,6 +186,17 @@ cyber ما هو علم الأمن السيبراني؟
         # التحقق من أن الرسالة في مجموعة
         if update.effective_chat.type not in ['group', 'supergroup']:
             return
+
+        # تحديث نشاط المجموعة
+        try:
+            if not self.db.update_group_activity(chat_id):
+                # إذا لم تكن المجموعة موجودة، نقوم بإضافتها
+                members_count = await update.effective_chat.get_member_count()
+                self.db.add_group(chat_id, update.effective_chat.title, members_count)
+                # تحديث النشاط مرة أخرى لزيادة عداد الرسائل
+                self.db.update_group_activity(chat_id)
+        except Exception as e:
+            logger.error(f"Error updating group activity: {e}")
 
         # Context Info
         group_title = update.effective_chat.title
