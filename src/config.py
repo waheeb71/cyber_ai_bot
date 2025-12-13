@@ -26,15 +26,9 @@ ADMIN_USERS = ["WAT4F", "M984D", "A66S6", "HTTHT"]
 
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-GEMINI_VISION_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent"
+GEMINI_VISION_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent"
 # Bot signature
-
-BOT_SIGNATURE = """
-━━━━━━━━━━━━━━
-قناة التليجرام: @SyberSc71
-برمجة: @WAT4F
-━━━━━━━━━━━━━━
-"""
+BOT_SIGNATURE = "\n\n━━━━━━━━━━━━━━\n قناة التلجرام: @SyberSc71\n👨‍💻 برمجة:  @WAT4F"
 
 # Webhook URL for Render deployment
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")

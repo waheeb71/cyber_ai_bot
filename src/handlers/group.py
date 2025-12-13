@@ -130,7 +130,7 @@ cyber ما هو علم الأمن السيبراني؟
              return
 
         self.db.reset_group_prompt(chat_id)
-        await update.message.reply_text("🔄 تم إعادة تعيين البرومبت إلى الوضع الافتراضي.")
+        await update.message.reply_text(" تم إعادة تعيين البرومبت إلى الوضع الافتراضي.")
 
     async def get_prompt_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """عرض البرومبت الحالي"""
@@ -138,10 +138,10 @@ cyber ما هو علم الأمن السيبراني؟
         custom_prompt = self.db.get_group_prompt(chat_id)
         
         if custom_prompt:
-            await update.message.reply_text(f"📝 البرومبت الحالي للمجموعة:\n\n{custom_prompt}")
+            await update.message.reply_text(f"البرومبت الحالي للمجموعة:\n\n{custom_prompt}")
         else:
             default_prompt = self.db.get_prompt_content('default')
-            await update.message.reply_text(f"ℹ️ تستخدم المجموعة البرومبت الافتراضي:\n\n{default_prompt}")
+            await update.message.reply_text(f" تستخدم المجموعة البرومبت الافتراضي:\n\n{default_prompt}")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """التعامل مع الرسائل في المجموعات"""
