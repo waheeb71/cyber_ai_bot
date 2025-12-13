@@ -168,8 +168,7 @@ class GroupHandler:
         if custom_prompt:
             await update.message.reply_text(f"البرومبت الحالي للمجموعة:\n\n{custom_prompt}")
         else:
-            default_prompt = self.db.get_prompt_content('default')
-            await update.message.reply_text(f" تستخدم المجموعة البرومبت الافتراضي:\n\n{default_prompt}")
+            await update.message.reply_text("ℹ️ هذه المجموعة ليس لديها برومبت مخصص (تعمل بالوضع الافتراضي).")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """التعامل مع الرسائل في المجموعات"""
