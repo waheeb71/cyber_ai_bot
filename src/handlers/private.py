@@ -219,7 +219,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             },
             "contents": history,
             "generationConfig": {
-                "temperature": 0.7, "topK": 40, "topP": 0.95, "maxOutputTokens": 1024,
+                "temperature": 0.7, "topK": 40, "topP": 0.95, "maxOutputTokens": 4096,
             }
         }
         headers = {"Content-Type": "application/json"}
@@ -233,7 +233,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         f"{GEMINI_API_URL}?key={current_key}",
-                        headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=50)
+                        headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=120)
                     ) as response:
                         if response.status == 200:
                             # Success! cleanup thinking message if exists (only once)
