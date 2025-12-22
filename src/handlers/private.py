@@ -168,7 +168,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
                 await handle_admin_message(update, context, db)
                 return
 
-        if user_message == " محادثة جديدة":
+        # Strip whitespace from the message for robust matching
+        clean_message = user_message.strip()
+
+        if clean_message == "محادثة جديدة":
             conversation_manager.clear_history(user_id)
             await update.message.reply_text(
                 f"تم مسح الذاكرة وبدء محادثة جديدة! كيف يمكنني مساعدتك؟{BOT_SIGNATURE}",
@@ -177,7 +180,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             return
 
         # ... (Search and Link Scan checks remain same) ...
-        if user_message == " البحث في الويب":
+        if clean_message == "البحث في الويب":
             await update.message.reply_text("أدخل ما تريد البحث عنه:")
             context.user_data['waiting_for_search_query'] = True
             return
@@ -186,7 +189,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
             await search_exa(update, context)
             context.user_data['waiting_for_search_query'] = False
             return
-        if user_message == " فحص الروابط":
+        if clean_message == "فحص الروابط":
             await update.message.reply_text("الرجاء إدخال الرابط الذي تريد فحصه:")
             context.user_data["waiting_for_url_scan"] = True
             return
