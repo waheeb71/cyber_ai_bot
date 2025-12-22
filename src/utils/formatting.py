@@ -6,18 +6,7 @@ import re
 import html
 
 def format_message(text: str) -> str:
-    """
-    Formats text from the AI (likely Markdown) into HTML for Telegram.
-    - Converts Markdown code blocks and inline code to HTML tags.
-    - Escapes content within code tags.
-    - Converts bold and italic Markdown to HTML tags.
-    - Improves readability of lists and punctuation.
-    """
-    # This is a simplified markdown to HTML converter.
-    # It's not perfect but handles common cases like code blocks, bold, and italic.
-
-    # Process code blocks first to avoid formatting their content.
-    # We use a placeholder substitution to protect the code content.
+  
     code_blocks = []
     def _sub_code_block(match):
         code = html.escape(match.group(2))
@@ -42,6 +31,10 @@ def format_message(text: str) -> str:
     text = re.sub(r'`([^`]+)`', _sub_inline_code, text)
 
     # Now do other formatting on the rest of the text
+    
+    # Escape HTML to prevent special characters from breaking the layout or being hidden
+    text = html.escape(text)
+
     # Bold
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
     text = re.sub(r'__(.*?)__', r'<b>\1</b>', text, flags=re.DOTALL)
